@@ -1,0 +1,15 @@
+[profile.default]
+src = "contracts"
+test = "test"
+out = "out"
+optimizer = true
+optimizer_runs = 200
+evm_version = "paris"
+solc_version = "0.8.30"
+
+[profile.fork]
+test = "fork"
+out = "out-fork"
+cache_path = "cache-fork"
+evm_version = "cancun"
+chain_id = 1
