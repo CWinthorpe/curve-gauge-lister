@@ -73,7 +73,7 @@ contract CurveGaugeLister {
     // ---------------------------------------------------------------------
 
     /// @notice Seconds in one Curve week (Thursday 00:00 UTC boundaries).
-    uint256 public constant WEEK = 604800;
+    uint256 public constant WEEK = CurveWeek.WEEK;
     /// @notice Exact paid admission fee in crvUSD base units.
     uint256 public constant FEE = 10_000e18;
     /// @notice Gross tranche released per matured epoch.
@@ -93,6 +93,21 @@ contract CurveGaugeLister {
     /// @dev MetaRegistry ABI bounds (plan §4 step 3).
     uint256 private constant MAX_HANDLER_ID = 10;
     uint256 private constant MAX_GAUGE_INDEX = 10;
+
+    /// @dev Named boundary of the FeeDistributor accounting proof (plan §6,
+    /// auditfix001 §3): the real deployed allocator (`CurveFeeDistribution.vy`
+    /// `_checkpoint_token`) apportions the accumulated fee-token delta across
+    /// at most 20 whole-week iterations starting at the cursor's week floor,
+    /// so a cursor older than 20 weeks would have its omitted tail discarded
+    /// (verified against the selected allocator's source and, at release,
+    /// re-read at its runtime per docs/DEPLOYMENT-PINS.md). This constant is
+    /// that COVERAGE horizon: `block.timestamp <= epochStart(t) +
+    /// FD_ACCOUNTING_HORIZON_WEEKS * WEEK`. It is private confiscation logic,
+    /// not a public constant or getter, and it is distinct from the
+    /// allocator's separate PUBLIC-ELIGIBILITY cooldown (`can_checkpoint_token`
+    /// and strictly `now > t + 86400` for a non-admin caller such as this
+    /// contract) — neither requirement implies the other.
+    uint256 private constant FD_ACCOUNTING_HORIZON_WEEKS = 20;
 
     // ---------------------------------------------------------------------
     // Storage (plan §3.1 logical layout)
@@ -462,8 +477,7 @@ contract CurveGaugeLister {
             return (0, confiscatedNow);
         }
 
-        uint256 elapsed = _cappedElapsed(rec.listingEpoch);
-        uint256 due = elapsed > uint256(rec.epochsReleased) ? elapsed - uint256(rec.epochsReleased) : 0;
+        uint256 due = _maturedUnpaid(rec.listingEpoch, rec.epochsReleased);
 
         for (uint256 i = 0; i < due; ++i) {
             // Step 4 (A2.3): iteration zero reuses the authoritative initial
@@ -476,21 +490,32 @@ contract CurveGaugeLister {
                 confiscatedNow = _confiscate(gauge);
                 break;
             }
-            uint256 scheduledEpoch = rec.listingEpoch + (uint256(rec.epochsReleased) + 1) * WEEK;
-
-            // Step 5: checks-effects-interactions for this quarter.
-            rec.epochsReleased += 1;
-            totalEscrow -= QUARTER;
+            _settleMaturedQuarter(gauge, rec);
             releasedNow += QUARTER;
+        }
+    }
 
-            _routeQuarter(gauge, rec, scheduledEpoch);
+    /// @dev One complete quarter transition in the plan §5 effect/routing/
+    /// event/status order: bump the funded counter and reserve, route the
+    /// matured tranche's split using the record's frozen snapshot, emit the
+    /// quarter release with the post-effect Active-only remainder, then move
+    /// to Exhausted at four funded quarters. Called only from the `checkpoint`
+    /// loop, which owns the kill-observation boundaries; the whole call keeps
+    /// all-due atomicity under the outer lock.
+    function _settleMaturedQuarter(address gauge, StoredListing storage rec) private {
+        uint256 scheduledEpoch = rec.listingEpoch + (uint256(rec.epochsReleased) + 1) * WEEK;
 
-            emit QuarterReleased(gauge, scheduledEpoch, QUARTER, _remaining(rec));
+        // Step 5: checks-effects-interactions for this quarter.
+        rec.epochsReleased += 1;
+        totalEscrow -= QUARTER;
 
-            if (rec.epochsReleased == EPOCHS) {
-                // Step 6: four funded quarters terminal; remaining is exactly 0.
-                rec.status = Status.Exhausted;
-            }
+        _routeQuarter(gauge, rec, scheduledEpoch);
+
+        emit QuarterReleased(gauge, scheduledEpoch, QUARTER, _remaining(rec));
+
+        if (rec.epochsReleased == EPOCHS) {
+            // Step 6: four funded quarters terminal; remaining is exactly 0.
+            rec.status = Status.Exhausted;
         }
     }
 
@@ -511,10 +536,17 @@ contract CurveGaugeLister {
     }
 
     /// @notice Permissionless best-effort retry of the FeeDistributor token
-    /// checkpoint.
+    /// checkpoint. For the approved ordinary public-caller configuration,
+    /// canonical zero-delta housekeeping is the direct `checkpoint_token()`
+    /// maintenance on the FeeDistributor itself (its own caller/cooldown
+    /// rules apply); this wrapper is retained convenience, not settlement
+    /// evidence.
     /// @dev Transfers no escrow and claims for no voter. Catch a checkpoint
     /// revert, emit its failure indication, return false; success returns true.
-    /// No pause gate.
+    /// A standalone true means only that the upstream call returned — the
+    /// evidence for successful escrow accounting is `EscrowConfiscated`,
+    /// committed by `_confiscate` exclusively after exact-custody and the
+    /// mandatory in-transaction accounting postchecks succeed. No pause gate.
     function checkpointFees() external lock returns (bool checkpointed) {
         return _tryCheckpointToken();
     }
@@ -620,23 +652,21 @@ contract CurveGaugeLister {
 
     /// @notice Return gross matured-but-unpaid amount only for Active/flag-false
     /// gauges; otherwise 0. Gauge read failures propagate, not treated as kills.
+    /// @dev The due count is the shared capped elapsed-minus-funded computation,
+    /// not `getListing.remaining`: elapsed weeks never include future
+    /// maturities, while `remaining` is the Active-only monetary balance.
     function releasable(address gauge) external view returns (uint256) {
         StoredListing storage rec = _listings[gauge];
         if (rec.status != Status.Active) return 0;
         if (_gaugeKilled(gauge)) return 0;
-        uint256 elapsed = _cappedElapsed(rec.listingEpoch);
-        if (elapsed <= uint256(rec.epochsReleased)) return 0;
-        return QUARTER * (elapsed - uint256(rec.epochsReleased));
+        return QUARTER * _maturedUnpaid(rec.listingEpoch, rec.epochsReleased);
     }
 
     /// @notice Floor a Unix timestamp to its Thursday-aligned Curve week.
-    /// @dev Unix epoch zero is a Thursday, so plain flooring aligns to Thursday
-    /// 00:00 UTC with no extra offset. The multiplication cannot overflow:
-    /// `(timestamp / WEEK) * WEEK <= timestamp` for every uint256 input.
+    /// @dev Delegates to the single production floor convention
+    /// (`CurveWeek.floorWeek`); public ABI shape unchanged.
     function epochStart(uint256 timestamp) public pure returns (uint256) {
-        unchecked {
-            return (timestamp / WEEK) * WEEK;
-        }
+        return CurveWeek.floorWeek(timestamp);
     }
 
     /// @notice Inspect immutable dependencies via generated getters for
@@ -648,15 +678,26 @@ contract CurveGaugeLister {
     // ---------------------------------------------------------------------
 
     function _cappedElapsed(uint256 listingEpoch) private view returns (uint256) {
-        uint256 nowTime = block.timestamp;
-        // listingEpoch is week-aligned, so flooring `now` before the
-        // subtraction is unnecessary: elapsed weeks are identical whether
-        // computed from the raw timestamp or its week floor. block.timestamp
-        // is monotonic within the listing record's lifetime; guard only
-        // against pathological pre-listing reads.
-        if (nowTime <= listingEpoch) return 0;
-        uint256 elapsed = (nowTime - listingEpoch) / WEEK;
+        // Precondition (chain-1 record invariant): `listingEpoch` is stored
+        // only from `epochStart(block.timestamp)` when a paid record is
+        // admitted, so it is never later than the block timestamp of any
+        // later settlement read, and elapsed counts are computed only from
+        // admitted paid records — never from caller-supplied or future
+        // anchors. Equality already yields zero, so no separate floor or
+        // early-return is needed; the subtraction cannot underflow under
+        // this documented precondition. The cap is retained.
+        uint256 elapsed = (block.timestamp - listingEpoch) / WEEK;
         return elapsed > EPOCHS ? EPOCHS : elapsed;
+    }
+
+    /// @dev Single source of the matured-unpaid quarter count: capped
+    /// elapsed weeks minus successfully funded quarters, never below zero.
+    /// Shared by `checkpoint`'s loop bound and `releasable`'s gross quote so
+    /// the external quote and all-due execution stay in agreement while
+    /// keeping their distinct purposes (due count vs monetary remaining).
+    function _maturedUnpaid(uint256 listingEpoch, uint8 epochsReleased) private view returns (uint256) {
+        uint256 elapsed = _cappedElapsed(listingEpoch);
+        return elapsed > uint256(epochsReleased) ? elapsed - uint256(epochsReleased) : 0;
     }
 
     /// @dev A2.3 kill oracle: killed-for-confiscation := `is_killed() == true`,
@@ -760,17 +801,25 @@ contract CurveGaugeLister {
 
         // Step 2 (auditfix001 §3): the real allocation cursor must be FRESH,
         // read BEFORE any terminal effect or transfer: nonzero, not in the
-        // future, and within the distributor's bounded 20-week accounting
-        // horizon measured from the cursor's week floor — equivalently
-        // now <= H = epochStart(t) + 20*WEEK (the first partial week
-        // consumes one of the 20 loop iterations; `now == H` is permitted,
-        // `H + 1` is rejected). The subtraction cannot underflow in this
-        // short-circuit order. This bound is private confiscation logic, not
-        // a public constant or getter.
+        // future, and within the named coverage horizon
+        // `FD_ACCOUNTING_HORIZON_WEEKS`, measured from the cursor's week
+        // floor — equivalently now <= H = epochStart(t) +
+        // FD_ACCOUNTING_HORIZON_WEEKS * WEEK (the first partial week
+        // consumes one of the allocator's bounded loop iterations; `now == H`
+        // is permitted, `H + 1` is rejected). The subtraction cannot
+        // underflow in this short-circuit order. The bound mirrors the
+        // selected allocator's source loop (docs/DEPLOYMENT-PINS.md
+        // re-verification records the runtime bytes; the fixture model is
+        // contracts/mocks/MockFeeDistributor.sol `_doCheckpointToken`). The
+        // caller rule stays separate: as an ordinary non-admin caller the
+        // lister additionally needs the allocator's public-checkpoint
+        // eligibility (strict cooldown), which is availability, not coverage.
+        // This bound is private confiscation logic, not a public constant or
+        // getter.
         uint256 t = IFeeDistributor(fd).last_token_time();
         if (t == 0) revert DistributorUnusable();
         if (t > block.timestamp) revert DistributorUnusable();
-        if (block.timestamp - epochStart(t) > 20 * WEEK) revert DistributorUnusable();
+        if (block.timestamp - epochStart(t) > FD_ACCOUNTING_HORIZON_WEEKS * WEEK) revert DistributorUnusable();
 
         // Step 3: effects before token interaction.
         amount = _remaining(rec);
@@ -807,10 +856,13 @@ contract CurveGaugeLister {
     /// @dev Best-effort `checkpoint_token()` for the STANDALONE
     /// `checkpointFees()` maintenance path only (auditfix001 §3:
     /// `_confiscate` performs mandatory accounting itself and no longer calls
-    /// this helper): catch a revert WITHOUT reverting anything else; emit its
+    /// this helper). Canonical ordinary zero-delta maintenance is the direct
+    /// FeeDistributor `checkpoint_token()` call; this wrapper is retained
+    /// convenience. Catch a revert WITHOUT reverting anything else; emit its
     /// outcome. A standalone FeeCheckpointResult(true) means the upstream
     /// call returned, NOT that arbitrary stale pre-existing fees were fully
-    /// allocated.
+    /// allocated and NOT escrow-accounting success (that evidence is
+    /// `EscrowConfiscated` from `_confiscate`).
     function _tryCheckpointToken() private returns (bool ok) {
         try IFeeDistributor(feeDistributor).checkpoint_token() {
             emit FeeCheckpointResult(true);

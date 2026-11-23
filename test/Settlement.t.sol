@@ -2016,10 +2016,16 @@ contract SettlementTest is TestBase {
     /// @dev auditfix001 §6 item 2: the accounting horizon includes the
     /// partial first week. For cursor offsets 0, 1 and WEEK-1 from a positive
     /// week boundary, H-1 and H account successfully (bucket increments equal
-    /// the exact upstream integer allocation formula) while H+1 reverts
-    /// before the transfer — including the near-end-of-week cursor where
-    /// now - t < 20*WEEK is nevertheless unsafe, because the horizon is
-    /// keyed to epochStart(t), not t.
+    /// the independent interval-coverage expectations, boundary and rounding
+    /// included) while H+1 reverts before the transfer — including the
+    /// near-end-of-week cursor where now - t < 20*WEEK is nevertheless unsafe,
+    /// because the horizon is keyed to epochStart(t), not t. H is the core's
+    /// named coverage bound `FD_ACCOUNTING_HORIZON_WEEKS` (private in
+    /// `CurveGaugeLister`; mirrors the selected allocator's bounded week-loop
+    /// iterations — the fixture's `_doCheckpointToken` models the same
+    /// `CurveFeeDistribution.vy` loop and docs/DEPLOYMENT-PINS.md requires the
+    /// runtime re-bind; the shared public-checkpoint cooldown is a separate
+    /// caller-eligibility requirement, not coverage).
     function test_AuditM01_AccountingHorizonIncludesPartialWeekEdges() public {
         uint256[3] memory offsets = [uint256(0), uint256(1), WEEK - 1];
         uint256[3] memory bases = [T0 + 10 * WEEK, T0 + 40 * WEEK, T0 + 70 * WEEK];
@@ -2038,6 +2044,21 @@ contract SettlementTest is TestBase {
             }
             _horizonProbe(cursor, h + 1, false);
         }
+
+        // Same-timestamp coverage case (allocator special branch): an admin
+        // checkpoint at the cursor's own timestamp credits the current week
+        // in full. Product confiscation can never itself reach now == t
+        // (strict public cooldown), so the raw allocator path exercises the
+        // branch the oracle's boundary cases must agree with.
+        MockFeeDistributor sameTs = new MockFeeDistributor(address(token), fdAdmin, T0 + 5 * WEEK);
+        vm.warp(T0 + 5 * WEEK + 12345);
+        vm.prank(fdAdmin);
+        sameTs.checkpoint_token(); // zero-delta sync: cursor advances to now
+        assertEq(sameTs.last_token_time(), block.timestamp, "same-timestamp precondition: cursor at now");
+        token.mint(address(sameTs), 777e18);
+        vm.prank(fdAdmin);
+        sameTs.checkpoint_token(); // same timestamp: full credit, no pro-ration
+        _assertUpstreamAllocation(sameTs, block.timestamp, block.timestamp, 777e18);
     }
 
     /// @dev One independent fixture per (cursor, when) probe: fresh FD with
@@ -2098,29 +2119,57 @@ contract SettlementTest is TestBase {
         _assertUpstreamAllocation(hFd_, cursor, when, FEE);
     }
 
-    /// @dev The exact deployed `_checkpoint_token` integer allocation: each
-    /// week bucket receives total * (bucketEnd - cursor)/sinceLast with the
-    /// same-timestamp special case, at most 20 iterations, tail discarded.
-    function _assertUpstreamAllocation(MockFeeDistributor fdx, uint256 t, uint256 nowTime, uint256 total)
+    /// @dev Independent interval-coverage oracle for the allocator's weekly
+    /// bookkeeping (S02 — replaces the copied recurrence of the fixture's
+    /// loop). The frozen accounting fact under test: the allocator apportions
+    /// the whole delta across the interval (cursor, now] in proportion to
+    /// each week bucket's COVERAGE of that interval, truncating per bucket,
+    /// bounded to the horizon's iterations; the same-timestamp case credits
+    /// the cursor's week in full. Expectations here are derived from
+    /// interval arithmetic over the week grid using this suite's own
+    /// fixture constants — never from the product or the mock's code paths.
+    function _assertUpstreamAllocation(MockFeeDistributor fdx, uint256 cursor, uint256 nowTime, uint256 total)
         internal
         view
     {
-        uint256 sinceLast = nowTime - t;
-        uint256 cur = t;
-        uint256 week = (t / WEEK) * WEEK;
-        for (uint256 i = 0; i < 20; ++i) {
-            uint256 nextWeek = week + WEEK;
-            uint256 share;
-            if (nowTime < nextWeek) {
-                share = (sinceLast == 0 && nowTime == t) ? total : (total * (nowTime - cur)) / sinceLast;
-            } else {
-                share = (sinceLast == 0 && nextWeek == t) ? total : (total * (nextWeek - cur)) / sinceLast;
-            }
-            assertEq(fdx.tokens_per_week(week), share, "upstream integer allocation exact");
-            if (nowTime < nextWeek) break;
-            cur = nextWeek;
-            week = nextWeek;
+        uint256 duration = nowTime - cursor;
+        if (duration == 0) {
+            // Same-timestamp case: the cursor's week bucket receives the
+            // entire delta; neighbours stay untouched.
+            uint256 bucket = (cursor / WEEK) * WEEK;
+            assertEq(fdx.tokens_per_week(bucket), total, "same-timestamp: cursor week holds full credit");
+            assertEq(fdx.tokens_per_week(bucket + WEEK), 0, "same-timestamp: following week untouched");
+            assertEq(fdx.tokens_per_week(bucket - WEEK), 0, "same-timestamp: prior week untouched");
+            return;
         }
+        uint256 allocated;
+        uint256 coveredWeeks;
+        uint256 pos = cursor;
+        while (pos < nowTime) {
+            // The product only ever reaches this oracle inside the named
+            // coverage horizon, which the bounded allocator loop always
+            // covers; an interval needing a 21st bucket is a test misuse.
+            require(coveredWeeks < 20, "oracle interval exceeds the bounded horizon");
+            uint256 bucket = (pos / WEEK) * WEEK;
+            uint256 bucketEnd = bucket + WEEK;
+            uint256 upto = nowTime < bucketEnd ? nowTime : bucketEnd;
+            uint256 coverage = upto - pos;
+            assertEq(
+                fdx.tokens_per_week(bucket),
+                (total * coverage) / duration,
+                "bucket credit equals coverage share (boundary + rounding exact)"
+            );
+            allocated += (total * coverage) / duration;
+            coveredWeeks += 1;
+            pos = upto;
+        }
+        // Rounding: per-bucket truncation under-allocates only — never over
+        // custody — with a shortfall strictly below one unit per covered
+        // bucket (upstream dust, distinct from an omitted allocation tail).
+        assertTrue(allocated <= total, "coverage shares never exceed the delta");
+        assertTrue(total - allocated < coveredWeeks, "rounding dust bounded by bucket count");
+        // Boundary: the week following the interval never receives credit.
+        assertEq(fdx.tokens_per_week((nowTime / WEEK) * WEEK + WEEK), 0, "week after now untouched");
     }
 
     /// @dev auditfix001 §6 item 3: zero/future cursor, cursor-getter

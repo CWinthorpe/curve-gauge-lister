@@ -160,8 +160,11 @@ contract MockFeeDistributor is IFeeDistributor {
     }
 
     /// @dev Faithful port of deployed S4 `_checkpoint_token` proportional
-    /// interval allocation (bounded 20-week loop), including the
-    /// same-timestamp case that credits the current week in full.
+    /// interval allocation (bounded 20-week loop — the same allocator loop
+    /// the core's private named bound `FD_ACCOUNTING_HORIZON_WEEKS` mirrors),
+    /// including the same-timestamp case that credits the current week in
+    /// full. The 20 stays a fixture-side copy of the upstream source, not a
+    /// derivation from the product helper.
     function _doCheckpointToken() private {
         uint256 tokenBalance = IERC20Minimal(_token).balanceOf(address(this));
         uint256 toDistribute = tokenBalance - _tokenLastBalance;

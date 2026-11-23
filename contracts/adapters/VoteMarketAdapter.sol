@@ -5,6 +5,7 @@ import {IIncentivePlatform} from "../interfaces/IIncentivePlatform.sol";
 import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
 import {ICampaignRemoteManager} from "../interfaces/ICampaignRemoteManager.sol";
 import {SafeToken} from "../libraries/SafeToken.sol";
+import {CurveWeek} from "../libraries/CurveWeek.sol";
 
 /// @title VoteMarketAdapter
 /// @notice Real-platform adapter funding VoteMarket v2 (Stake DAO) campaigns
@@ -31,8 +32,6 @@ import {SafeToken} from "../libraries/SafeToken.sol";
 /// and votemarket endpoints are constructor-bound so no owner action can
 /// redirect token approvals or bridge destinations.
 contract VoteMarketAdapter is IIncentivePlatform {
-    uint256 private constant WEEK = 604800;
-
     /// @notice VoteMarket v2 campaigns live on Arbitrum one (INTEL §3.3).
     uint256 public constant DESTINATION_CHAIN_ID = 42161;
     /// @notice Fixed campaign length in periods (matches the YB helper; the
@@ -217,7 +216,10 @@ contract VoteMarketAdapter is IIncentivePlatform {
         receipt = keccak256(abi.encode(gauge, scheduledEpoch, amount, index + 1));
         if (receipt == bytes32(0)) revert BadReceipt();
 
-        uint256 executionEpoch = (block.timestamp / WEEK) * WEEK;
+        // Execution-week label uses the single production Curve-week floor
+        // convention (CurveWeek); it labels when the L1 ingress ran and is
+        // not a delivery assertion.
+        uint256 executionEpoch = CurveWeek.floorWeek(block.timestamp);
         _depositLog.push(
             DepositRecord({
                 gauge: gauge,
