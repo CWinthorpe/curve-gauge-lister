@@ -6,6 +6,7 @@ import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
 import {IVotiumV2} from "../interfaces/IVotiumV2.sol";
 import {SafeToken} from "../libraries/SafeToken.sol";
 import {AdapterOwnable} from "../libraries/AdapterOwnable.sol";
+import {AdapterCustody} from "../libraries/AdapterCustody.sol";
 
 /// @title VotiumAdapter
 /// @notice Real-platform adapter funding Votium v2 from the CurveGaugeLister
@@ -120,8 +121,10 @@ contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
 
     /// @inheritdoc IIncentivePlatform
     function deposit(address gauge, uint256 scheduledEpoch, uint256 amount) external returns (bytes32 receipt) {
-        if (msg.sender != _lister) revert NotLister();
-        if (gauge == address(0) || amount == 0) revert BadDeposit();
+        // Shared stateless binding/shape predicates (CX-ADAPTER); the
+        // adapter keeps its own errors and this error order.
+        if (!AdapterCustody.isBoundCaller(_lister, msg.sender)) revert NotLister();
+        if (!AdapterCustody.validDepositShape(gauge, amount)) revert BadDeposit();
 
         // Round is the platform's live active round at call time; a late
         // scheduledEpoch buys participation in THIS round, never retroactive
@@ -135,7 +138,9 @@ contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
 
         uint256 balBefore = IERC20Minimal(crvUSD).balanceOf(address(this));
         SafeToken.safeTransferFrom(crvUSD, msg.sender, address(this), amount);
-        if (IERC20Minimal(crvUSD).balanceOf(address(this)) != balBefore + amount) revert PullDeltaMismatch();
+        if (!AdapterCustody.exactPullCredit(balBefore, IERC20Minimal(crvUSD).balanceOf(address(this)), amount)) {
+            revert PullDeltaMismatch();
+        }
 
         address[] memory gauges = new address[](1);
         gauges[0] = gauge;
@@ -143,7 +148,10 @@ contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
         amounts[0] = amount;
 
         // Bounded approval, deposit, then zero: no enduring allowance is ever
-        // left behind (INTEL §4). A failed platform call reverts the whole
+        // left behind. (Current law with NO exception: INTEL §4's historical
+        // "except where platform ABI requires standing approvals" clause was
+        // NOT adopted — both adapters use exact bounded approvals cleared
+        // after every venue call.) A failed platform call reverts the whole
         // deposit, approvals included.
         SafeToken.forceApprove(crvUSD, votium, amount);
         IVotiumV2(votium).depositUnevenSplitGauges(crvUSD, round, gauges, amounts, maxPerVote, _excluded);
@@ -151,8 +159,11 @@ contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
 
         // No withdrawal surface exists in this adapter, so custody must be
         // complete inside the deposit itself: every pulled unit has to have
-        // reached the platform in this same call.
-        if (IERC20Minimal(crvUSD).balanceOf(address(this)) != balBefore) revert PlatformUnderpull();
+        // reached the platform in this same call (shared baseline predicate,
+        // own error and position, CX-ADAPTER).
+        if (!AdapterCustody.custodyClearedToBaseline(balBefore, IERC20Minimal(crvUSD).balanceOf(address(this)))) {
+            revert PlatformUnderpull();
+        }
 
         // Deterministic in (gauge, scheduledEpoch, amount, round); a zero
         // receipt is unreachable by construction but guarded explicitly.
@@ -200,10 +211,17 @@ contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
         if (excluded_.length > 0 && excluded_.length > IVotiumV2(votium).maxExclusions()) {
             revert BadVenueExclusions();
         }
-        delete _excluded;
-        for (uint256 i = 0; i < excluded_.length; ++i) {
-            _excluded.push(excluded_[i]);
-        }
+        // Whole-list replacement via the compiler's ordered calldata→storage
+        // copy (CX-EXCLUDED): semantically identical to the previous
+        // delete-then-push loop (length set, all elements assigned, order
+        // preserved), and it runs ONLY after every validation above, so a
+        // rejected list still never reaches storage. The venue's own
+        // maxExclusions() read keeps its position immediately before the
+        // write, skipped for the empty list. The UNSIGNED strict-increase
+        // rule (zero, duplicates) stays this venue's own policy — the
+        // VoteMarket adapter's arbitrary distinct-caller-order rule is NOT
+        // normalized to it (or vice versa) by this cut.
+        _excluded = excluded_;
         emit ExcludedSet(excluded_);
     }
     // transferOwnership/acceptOwnership inherited from AdapterOwnable (S22).

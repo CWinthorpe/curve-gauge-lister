@@ -6,6 +6,7 @@ import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
 import {ICampaignRemoteManager} from "../interfaces/ICampaignRemoteManager.sol";
 import {SafeToken} from "../libraries/SafeToken.sol";
 import {AdapterOwnable} from "../libraries/AdapterOwnable.sol";
+import {AdapterCustody} from "../libraries/AdapterCustody.sol";
 import {CurveWeek} from "../libraries/CurveWeek.sol";
 
 /// @title VoteMarketAdapter
@@ -71,7 +72,11 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
     /// (gauge, scheduledEpoch, amount, local ordinal); the ordinal is LOCAL
     /// to this adapter's log on chain 1 and means nothing at the destination.
     /// Records and their events attest funded L1 ingress only — never L2
-    /// campaign creation, acceptance or delivery.
+    /// campaign creation, acceptance or delivery. CX-DERIVED-RECEIPT: the
+    /// value is determined by the immutable row fields plus the one-based
+    /// log position, so only the row facts are stored as evidence and the
+    /// getters/event/return derive the receipt from them; the member stays
+    /// for record-type and stride stability.
     struct DepositRecord {
         address gauge;
         uint256 scheduledEpoch;
@@ -161,26 +166,32 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
 
     /// @inheritdoc IIncentivePlatform
     function deposit(address gauge, uint256 scheduledEpoch, uint256 amount) external returns (bytes32 receipt) {
-        if (msg.sender != _lister) revert NotLister();
-        if (gauge == address(0) || amount == 0) revert BadDeposit();
+        // Shared stateless binding/shape predicates (CX-ADAPTER); the
+        // adapter keeps its own errors, this error order, and its OWN
+        // pair-key duplicate rejection below (Votium's repetitions policy is
+        // not normalized here).
+        if (!AdapterCustody.isBoundCaller(_lister, msg.sender)) revert NotLister();
+        if (!AdapterCustody.validDepositShape(gauge, amount)) revert BadDeposit();
 
         bytes32 key = keccak256(abi.encode(gauge, scheduledEpoch));
         if (_depositIndex[key] != 0) revert DuplicateDeposit();
 
         uint256 balBefore = IERC20Minimal(crvUSD).balanceOf(address(this));
         SafeToken.safeTransferFrom(crvUSD, msg.sender, address(this), amount);
-        if (IERC20Minimal(crvUSD).balanceOf(address(this)) != balBefore + amount) revert PullDeltaMismatch();
+        if (!AdapterCustody.exactPullCredit(balBefore, IERC20Minimal(crvUSD).balanceOf(address(this)), amount)) {
+            revert PullDeltaMismatch();
+        }
 
-        // Native gas budget for the L1→L2 campaign message: the one shared
-        // priced-message calculation (S15).
+        // Native gas budget for the L1→L2 campaign message: one named
+        // priced-message calculation shared by quote and execution
+        // (S15/CX-QUOTE).
         uint256 additionalGasLimit = _messageGasLimit();
-        uint256 value = additionalGasLimit * gasPrice;
+        uint256 value = _oneMessageEthRequirement();
         if (address(this).balance < value) revert InsufficientEth();
 
-        address[] memory addresses_ = new address[](_excluded.length);
-        for (uint256 i = 0; i < _excluded.length; ++i) {
-            addresses_[i] = _excluded[i];
-        }
+        // Ordered storage→memory copy (CX-EXCLUDED): equivalent to the
+        // previous element-by-element loop, order preserved.
+        address[] memory addresses_ = _excluded;
         ICampaignRemoteManager.CampaignCreationParams memory params = ICampaignRemoteManager.CampaignCreationParams({
             chainId: block.chainid,
             gauge: gauge,
@@ -194,9 +205,12 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
             isWhitelist: false
         });
 
-        // Bounded approval, campaign call, then zero: no enduring allowance is
-        // ever left behind (INTEL §4). A failed manager call reverts the whole
-        // deposit, approvals included.
+        // Bounded approval, campaign call, then zero: no enduring allowance
+        // is ever left behind. (Current law with NO exception: INTEL §4's
+        // historical "except where platform ABI requires standing approvals"
+        // clause was NOT adopted — both adapters use exact bounded approvals
+        // cleared after every venue call.) A failed manager call reverts the
+        // whole deposit, approvals included.
         SafeToken.forceApprove(crvUSD, campaignRemoteManager, amount);
         ICampaignRemoteManager(campaignRemoteManager).createCampaign{value: value}(
             params, DESTINATION_CHAIN_ID, additionalGasLimit, votemarket
@@ -205,18 +219,33 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
 
         // No token or ETH withdrawal surface exists here, so custody must be
         // complete inside the deposit itself: every pulled unit has to have
-        // reached the CampaignRemoteManager in this same call.
-        if (IERC20Minimal(crvUSD).balanceOf(address(this)) != balBefore) revert PlatformUnderpull();
+        // reached the CampaignRemoteManager in this same call (shared
+        // baseline predicate, own error and position, CX-ADAPTER).
+        if (!AdapterCustody.custodyClearedToBaseline(balBefore, IERC20Minimal(crvUSD).balanceOf(address(this)))) {
+            revert PlatformUnderpull();
+        }
 
         // Nonce-keyed so receipts from distinct keys never alias across the
         // log's history (the local ordinal is adapter-domain only, S09),
         // while a duplicate (gauge, scheduledEpoch) is rejected before any
-        // pull.
-        // This concrete duplicate-key rejection is the S21 reason the core
-        // forbids a mixed split onto one shared endpoint — one quarter would
-        // route two same-key calls here. It is VoteMarket-specific ingress
-        // semantics, NOT a universal adapter rule: Votium's live-round witness
-        // separately accepts multiple same-gauge entries in one round.
+        // pull. This concrete duplicate-key rejection is the S21 reason the
+        // core forbids a mixed split onto one shared endpoint — one quarter
+        // would route two same-key calls here. It is VoteMarket-specific
+        // ingress semantics, NOT a universal adapter rule: Votium's
+        // live-round witness separately accepts multiple same-gauge entries
+        // in one round.
+        //
+        // CX-DERIVED-RECEIPT: the receipt is a pure function of the
+        // immutable row fields plus its one-based position in the log, so
+        // only the four row facts are stored and the value is DERIVED again,
+        // identically, behind the public getters below and in the event/
+        // return. The stored `receipt` member and the record type/stride
+        // stay (layout preservation); its private write is skipped — no
+        // retained witness uses raw-slot observations of that member as
+        // evidence (verified against the bound suite; this is the row's
+        // explicit decision). Event hash, return hash, absence sentinel,
+        // duplicate-key rejection, count, order and out-of-range behavior
+        // are unchanged. No gas result is claimed from this cut.
         uint256 index = _depositLog.length;
         receipt = keccak256(abi.encode(gauge, scheduledEpoch, amount, index + 1));
         if (receipt == bytes32(0)) revert BadReceipt();
@@ -231,7 +260,7 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
                 scheduledEpoch: scheduledEpoch,
                 amount: amount,
                 executionEpoch: executionEpoch,
-                receipt: receipt
+                receipt: bytes32(0)
             })
         );
         _depositIndex[key] = index + 1;
@@ -252,7 +281,7 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
     /// before the next scheduled settlement.
     function ethDeficit(uint256 amount) external view returns (uint256) {
         if (amount == 0) return 0;
-        uint256 required = _messageGasLimit() * gasPrice;
+        uint256 required = _oneMessageEthRequirement();
         uint256 held = address(this).balance;
         return required > held ? required - held : 0;
     }
@@ -268,12 +297,27 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
         return campaignCreationGas + blacklistedAddressGas * _excluded.length;
     }
 
+    /// @dev The complete priced-message calculation in units of ONE
+    /// message (CX-QUOTE): the configured ETH cost of a single
+    /// campaign-creation bridge message under the CURRENT settings — the
+    /// one number the keeper-facing `ethDeficit` shortfall quotes for any
+    /// positive amount and the exact value `deposit` sends with its
+    /// `createCampaign`. Single expression, shared by quote and execution so
+    /// they cannot diverge; the zero-amount no-message query keeps its
+    /// distinct deliberate zero case untouched (no new public shape). This
+    /// is not a backlog or delivery quote.
+    function _oneMessageEthRequirement() private view returns (uint256) {
+        return _messageGasLimit() * gasPrice;
+    }
+
     /// @notice Inspect the recorded funding of one (gauge, scheduledEpoch).
     /// @dev Zero receipt means "never funded" (the core requires funded
     /// receipts, so a recorded 0 receipt cannot have happened). These
     /// getters expose recorded L1 ingress only (S09): keyed and chronological
     /// forms view the SAME adapter-domain record; neither attests destination
-    /// delivery.
+    /// delivery. The receipt is derived from the stored row plus its one-based
+    /// position (CX-DERIVED-RECEIPT) — the same preimage expression used at
+    /// deposit time — not read back from a stored duplicate.
     function getDeposit(address gauge, uint256 scheduledEpoch)
         external
         view
@@ -282,7 +326,8 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
         uint256 index = _depositIndex[keccak256(abi.encode(gauge, scheduledEpoch))];
         if (index == 0) return (0, 0, bytes32(0));
         DepositRecord storage d = _depositLog[index - 1];
-        return (d.amount, d.executionEpoch, d.receipt);
+        receipt = keccak256(abi.encode(d.gauge, d.scheduledEpoch, d.amount, index));
+        return (d.amount, d.executionEpoch, receipt);
     }
 
     /// @notice Number of recorded campaign deposits.
@@ -291,8 +336,14 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
     }
 
     /// @notice Chronological deposit record.
+    /// @dev The stored row's `receipt` member (kept for stride/layout
+    /// stability) is not the read source: the value is derived from the row
+    /// fields plus the one-based position behind this getter as well
+    /// (CX-DERIVED-RECEIPT). Out-of-range indices revert exactly as before.
     function depositAt(uint256 index) external view returns (DepositRecord memory) {
-        return _depositLog[index];
+        DepositRecord memory d = _depositLog[index];
+        d.receipt = keccak256(abi.encode(d.gauge, d.scheduledEpoch, d.amount, index + 1));
+        return d;
     }
 
     /// @notice Accept the ops ETH float from anyone. There is deliberately no
@@ -324,10 +375,14 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
                 if (excluded_[j] == e) revert BadExclusion();
             }
         }
-        delete _excluded;
-        for (uint256 i = 0; i < excluded_.length; ++i) {
-            _excluded.push(excluded_[i]);
-        }
+        // Whole-list replacement via the compiler's ordered calldata→storage
+        // copy (CX-EXCLUDED): semantically identical to the previous
+        // delete-then-push loop (length set, all elements assigned), and it
+        // runs only after full validation. THIS venue's arbitrary
+        // caller-order/pairwise-distinct policy is preserved and NOT
+        // normalized to Votium's unsigned-strict-increase rule (or vice
+        // versa) by this cut.
+        _excluded = excluded_;
         emit ExcludedSet(excluded_);
     }
 
