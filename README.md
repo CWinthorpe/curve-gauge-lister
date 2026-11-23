@@ -15,9 +15,9 @@ The validator pointer is immutable, but its owner or appointed managers can chan
 
 ## Status and evidence
 
-Not deployed. The no-bounty release requires the gates in `plans/V1ALIGN-PLAN.md`; an authority ruling is not implementation acceptance or mainnet authorization. Exact test identities and derived expectations are in `plans/V1ALIGN-WITNESS-INVENTORY.json`. Consult candidate-bound execution receipts for actual passing counts, not historical totals.
+Not deployed. The no-bounty release plan and gates, the exact ABI/layout manifest, the exact test-identity witness inventory and the dependency and acceptance receipts are held by the project owner as a single release evidence package bound to the exact candidate commit, and are producible on demand; an authority ruling is not implementation acceptance or mainnet authorization. Consult candidate-bound execution receipts for actual passing counts, not historical totals.
 
-The earlier V2/reporting implementation and proposal are preserved at Git commit `e18bee54c08832dd7fd6d0a11932290155bf9178`. Historical reviews describe their original candidates and are not a fresh audit of this release. The source comparison and baseline evidence are in `review/v1align/`. Current operational limits include FeeDistributor checkpoint contention, immutable venue availability and irrecoverable VoteMarket campaign residuals; see `docs/OPERATIONS.md`.
+The earlier V2/reporting implementation and proposal are preserved at Git commit `e18bee54c08832dd7fd6d0a11932290155bf9178`. Historical reviews describe their original candidates and are not a fresh audit of this release; the source comparison and baseline evidence belong to those records and are held with the release evidence package. Current operational limits include FeeDistributor checkpoint contention, immutable venue availability and irrecoverable VoteMarket campaign residuals; see `docs/OPERATIONS.md`.
 
 ## Layout
 
@@ -27,7 +27,8 @@ The earlier V2/reporting implementation and proposal are preserved at Git commit
 - `contracts/mocks/`, `test/` — test fixtures and offline tests, including retained adapter-hardening regressions.
 - `fork/` — concrete pinned mainnet-fork runners; abstract scenarios remain under `test/fork/`.
 - `docs/CURVE-PROPOSAL.md`, `docs/ABI.md`, `docs/OPERATIONS.md`, `docs/DEPLOYMENT-PINS.md` — current product and deployment reference.
-- `plans/`, `review/` — authority, exact manifests and candidate-bound evidence.
+
+Release authority, exact manifests and candidate-bound evidence are not shipped in the tree; they are held by the project owner as the candidate-bound release evidence package and producible on demand.
 
 ## Running checks
 

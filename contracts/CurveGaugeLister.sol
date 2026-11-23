@@ -9,13 +9,19 @@ import {IFeeDistributor} from "./interfaces/IFeeDistributor.sol";
 import {IIncentivePlatform} from "./interfaces/IIncentivePlatform.sol";
 import {ITrustedGaugeValidator} from "./interfaces/ITrustedGaugeValidator.sol";
 import {SafeToken} from "./libraries/SafeToken.sol";
+import {CurveWeek} from "./libraries/CurveWeek.sol";
 
 /// @title CurveGaugeLister
 /// @notice Fee-gated gauge lister with four-epoch bribe escrow and gauge-flag
 /// confiscation to the fixed crvUSD FeeDistributor. Chain-1 only; starts
 /// paused; paid admission requires the constructor-pinned trusted gauge
 /// validator to return canonical true for the exact gauge.
-/// plans/V1ALIGN-PLAN.md is the release authority for this amended source.
+/// @dev The candidate-bound release evidence package — normative plan, ABI
+/// manifest, witness inventory and gate receipts, including the dependency
+/// proofs — is held by the project owner and producible on demand; "plan §"
+/// markers in this file name sections of that owner-held specification.
+/// Neither a historical comment nor a generated interface reference is an
+/// independent release authority.
 contract CurveGaugeLister {
     // ---------------------------------------------------------------------
     // Types (plan §3.1)

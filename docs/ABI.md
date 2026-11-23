@@ -1,6 +1,6 @@
 # CurveGaugeLister — no-bounty interface
 
-This reference describes the v1align target. The complete normative ABI is `../plans/V1ALIGN-MANIFEST.json`; acceptance requires fresh compiler ABI and method identifiers to match it under both profiles. A disagreement blocks release; neither prose nor a matching function count silently overrides the contract or manifest.
+This reference describes the v1align target. The complete normative ABI manifest, the fresh-compiler ABI/method-identifier comparisons under both profiles and the layout receipts are held by the project owner inside the candidate-bound release evidence package and producible on demand; a disagreement between the contract and that manifest blocks release, and neither this prose nor a matching function count silently overrides the contract.
 
 ## Constructor and tuples
 

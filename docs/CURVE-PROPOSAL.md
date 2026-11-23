@@ -43,8 +43,7 @@ Each successful paid listing pre-funds its initial vote-incentive budget. A late
 Not deployed. The v1align authority review defines the no-bounty source amendment and the release gates; implementation acceptance must bind the actual release commit and fresh test/ABI/size receipts. Earlier reviews and test totals apply to their original candidates only. The previous product/proposal is preserved at `e18bee54c08832dd7fd6d0a11932290155bf9178` for the public audit trail.
 
 - Repository: https://github.com/CWinthorpe/curve-gauge-lister
-- Authority and gates: `../plans/V1ALIGN-PLAN.md`
-- Exact ABI manifest: `../plans/V1ALIGN-MANIFEST.json`
+- Authority, gates and the exact ABI manifest: the candidate-bound release evidence package (normative plan, ABI/layout manifest, witness inventory, dependency and acceptance receipts), held by the project owner and producible on demand
 - Interface reference: `ABI.md`
 - Operations and limits: `OPERATIONS.md`
 - Deployment pins and re-verification: `DEPLOYMENT-PINS.md`
