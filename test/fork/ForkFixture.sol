@@ -934,15 +934,6 @@ abstract contract ForkFixture is TestBase {
     // Log helpers (fork-owned, over FVm.Log)
     // ------------------------------------------------------------------
 
-    function _hasLog(FVm.Log[] memory logs, address emitter, bytes32 topic0) internal pure returns (bool) {
-        for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].emitter == emitter && logs[i].topics.length > 0 && logs[i].topics[0] == topic0) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     function _countLogs(FVm.Log[] memory logs, address emitter, bytes32 topic0) internal pure returns (uint256 n) {
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].emitter == emitter && logs[i].topics.length > 0 && logs[i].topics[0] == topic0) {
