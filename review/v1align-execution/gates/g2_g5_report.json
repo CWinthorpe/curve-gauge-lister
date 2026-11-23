@@ -1,0 +1,118 @@
+{
+ "default": {
+  "CurveGaugeLister.sol/CurveGaugeLister.json": {
+   "runtime_bytes": 15226,
+   "runtime_headroom": 9350,
+   "creation_bytes": 17588,
+   "runtime_sha256": "2d046bdea69e856cd0b66024335190bcb289b0d3c34c46be71f22f0654d7f5d8"
+  },
+  "VotiumAdapter.sol/VotiumAdapter.json": {
+   "runtime_bytes": 4921,
+   "runtime_headroom": 19655,
+   "creation_bytes": 5440,
+   "runtime_sha256": "b0b021d96436aad5150e8e002e73c8cfd211ad1eaacaa313c1e895cc4ef81003"
+  },
+  "VoteMarketAdapter.sol/VoteMarketAdapter.json": {
+   "runtime_bytes": 6889,
+   "runtime_headroom": 17687,
+   "creation_bytes": 7473,
+   "runtime_sha256": "ef04bf80b0c4fe9bbc2d8796266cfb4291f4e363abb9e3dc8819dd6c16f2e934"
+  }
+ },
+ "fork": {
+  "CurveGaugeLister.sol/CurveGaugeLister.json": {
+   "runtime_bytes": 14965,
+   "runtime_headroom": 9611,
+   "creation_bytes": 17280,
+   "runtime_sha256": "2354f7bfc5fb27252fa48ce0ebc69a0a62ba43f65e8249b6b0c6a4344d71b329"
+  },
+  "VotiumAdapter.sol/VotiumAdapter.json": {
+   "runtime_bytes": 4803,
+   "runtime_headroom": 19773,
+   "creation_bytes": 5310,
+   "runtime_sha256": "0c5e453be2d74dac86700a6199ed6d4c59e7db7e31ec898590fb020a44f19e4d"
+  },
+  "VoteMarketAdapter.sol/VoteMarketAdapter.json": {
+   "runtime_bytes": 6725,
+   "runtime_headroom": 17851,
+   "creation_bytes": 7295,
+   "runtime_sha256": "e3b0bc48fcc4ca4e562c9ce4e117906db30f2f64fc5bf35ba29c72f112f00d1b"
+  }
+ },
+ "import_closure": {
+  "contracts/CurveGaugeLister.sol": [
+   "contracts/interfaces/IERC20Minimal.sol",
+   "contracts/interfaces/IListingController.sol",
+   "contracts/interfaces/ICurveRegistry.sol",
+   "contracts/interfaces/ICurveGauge.sol",
+   "contracts/interfaces/IFeeDistributor.sol",
+   "contracts/interfaces/IIncentivePlatform.sol",
+   "contracts/interfaces/ITrustedGaugeValidator.sol",
+   "contracts/libraries/SafeToken.sol"
+  ],
+  "contracts/adapters/VoteMarketAdapter.sol": [
+   "contracts/interfaces/IIncentivePlatform.sol",
+   "contracts/interfaces/IERC20Minimal.sol",
+   "contracts/interfaces/ICampaignRemoteManager.sol",
+   "contracts/libraries/SafeToken.sol"
+  ],
+  "contracts/adapters/VotiumAdapter.sol": [
+   "contracts/interfaces/IIncentivePlatform.sol",
+   "contracts/interfaces/IERC20Minimal.sol",
+   "contracts/interfaces/IVotiumV2.sol",
+   "contracts/libraries/SafeToken.sol"
+  ],
+  "contracts/interfaces/ICampaignRemoteManager.sol": [],
+  "contracts/interfaces/ICurveGauge.sol": [],
+  "contracts/interfaces/ICurveRegistry.sol": [],
+  "contracts/interfaces/IERC20Minimal.sol": [],
+  "contracts/interfaces/IFeeDistributor.sol": [],
+  "contracts/interfaces/IIncentivePlatform.sol": [],
+  "contracts/interfaces/IListingController.sol": [],
+  "contracts/interfaces/ITrustedGaugeValidator.sol": [],
+  "contracts/interfaces/IVotiumV2.sol": [],
+  "contracts/libraries/SafeToken.sol": []
+ },
+ "sizes": [
+  {
+   "CurveGaugeLister.sol/CurveGaugeLister.json": {
+    "runtime_bytes": 15226,
+    "runtime_headroom": 9350,
+    "creation_bytes": 17588,
+    "runtime_sha256": "2d046bdea69e856cd0b66024335190bcb289b0d3c34c46be71f22f0654d7f5d8"
+   },
+   "VotiumAdapter.sol/VotiumAdapter.json": {
+    "runtime_bytes": 4921,
+    "runtime_headroom": 19655,
+    "creation_bytes": 5440,
+    "runtime_sha256": "b0b021d96436aad5150e8e002e73c8cfd211ad1eaacaa313c1e895cc4ef81003"
+   },
+   "VoteMarketAdapter.sol/VoteMarketAdapter.json": {
+    "runtime_bytes": 6889,
+    "runtime_headroom": 17687,
+    "creation_bytes": 7473,
+    "runtime_sha256": "ef04bf80b0c4fe9bbc2d8796266cfb4291f4e363abb9e3dc8819dd6c16f2e934"
+   }
+  },
+  {
+   "CurveGaugeLister.sol/CurveGaugeLister.json": {
+    "runtime_bytes": 14965,
+    "runtime_headroom": 9611,
+    "creation_bytes": 17280,
+    "runtime_sha256": "2354f7bfc5fb27252fa48ce0ebc69a0a62ba43f65e8249b6b0c6a4344d71b329"
+   },
+   "VotiumAdapter.sol/VotiumAdapter.json": {
+    "runtime_bytes": 4803,
+    "runtime_headroom": 19773,
+    "creation_bytes": 5310,
+    "runtime_sha256": "0c5e453be2d74dac86700a6199ed6d4c59e7db7e31ec898590fb020a44f19e4d"
+   },
+   "VoteMarketAdapter.sol/VoteMarketAdapter.json": {
+    "runtime_bytes": 6725,
+    "runtime_headroom": 17851,
+    "creation_bytes": 7295,
+    "runtime_sha256": "e3b0bc48fcc4ca4e562c9ce4e117906db30f2f64fc5bf35ba29c72f112f00d1b"
+   }
+  }
+ ]
+}

@@ -1,0 +1,116 @@
+F-TF-CHAIN: OK | pristine_green=True red@TF_CHAIN_FIRST=True restored_green=True
+F-TF-CODE: OK | pristine_green=True red@TF_PIN_NO_CODE=True restored_green=True
+F-TF-PIN: OK | pristine_green=True red@TF_PIN_EXACT=True restored_green=True
+F-TF-PAUSE: OK | pristine_green=True red@TF_PIN_EXACT=True restored_green=True
+F-TF-FALSE: OK | pristine_green=True red@TF_FALSE_REJECTS=True restored_green=True
+F-TF-FAULT: OK | pristine_green=True red@TF_READ_FAULT_REJECTS=True restored_green=True
+F-TF-LENGTH: OK | pristine_green=True red@TF_EXACT_RETURN_LENGTH=True restored_green=True
+F-TF-BOOL: OK | pristine_green=True red@TF_CANONICAL_BOOL=True restored_green=True
+F-TF-ARG: OK | pristine_green=True red@TF_EXACT_GAUGE_ARGUMENT=True restored_green=True
+F-TF-SELECTOR: OK | pristine_green=True red@TF_EXACT_GAUGE_ARGUMENT=True restored_green=True
+F-TF-AFTER-ADD: OK | pristine_green=True red@TF_BEFORE_ADD_GAUGE=True restored_green=True
+F-TF-AFTER-FEE: OK | pristine_green=True red@TF_BEFORE_TRANSFER=True restored_green=True
+F-TF-AFTER-READY: OK | pristine_green=True red@TF_BEFORE_READINESS=True restored_green=True
+F-TF-REGISTRY: OK | pristine_green=True red@TF_REGISTRY_FIRST=True restored_green=True
+F-TF-OWNER: OK | pristine_green=True red@TF_OWNER_PAID_NOT_EXEMPT=True restored_green=True
+F-TF-FREE: OK | pristine_green=True red@TF_DAO_NO_CHECKER_DEPENDENCE=True restored_green=True
+F-TF-RETRO: OK | pristine_green=True red@TF_NO_RETROACTIVE_DRIP_GATE=True restored_green=True
+F-TF-RECORD: OK | pristine_green=True red@TF_TRUSTED_PAID_ACTIVE=True restored_green=True
+F-TF-FREE-EVENT: OK | pristine_green=True red@TF_DAO_NO_FACTORY_ALLOWED=True restored_green=True
+[
+ [
+  "F-TF-CHAIN",
+  "OK",
+  "pristine_green=True red@TF_CHAIN_FIRST=True restored_green=True"
+ ],
+ [
+  "F-TF-CODE",
+  "OK",
+  "pristine_green=True red@TF_PIN_NO_CODE=True restored_green=True"
+ ],
+ [
+  "F-TF-PIN",
+  "OK",
+  "pristine_green=True red@TF_PIN_EXACT=True restored_green=True"
+ ],
+ [
+  "F-TF-PAUSE",
+  "OK",
+  "pristine_green=True red@TF_PIN_EXACT=True restored_green=True"
+ ],
+ [
+  "F-TF-FALSE",
+  "OK",
+  "pristine_green=True red@TF_FALSE_REJECTS=True restored_green=True"
+ ],
+ [
+  "F-TF-FAULT",
+  "OK",
+  "pristine_green=True red@TF_READ_FAULT_REJECTS=True restored_green=True"
+ ],
+ [
+  "F-TF-LENGTH",
+  "OK",
+  "pristine_green=True red@TF_EXACT_RETURN_LENGTH=True restored_green=True"
+ ],
+ [
+  "F-TF-BOOL",
+  "OK",
+  "pristine_green=True red@TF_CANONICAL_BOOL=True restored_green=True"
+ ],
+ [
+  "F-TF-ARG",
+  "OK",
+  "pristine_green=True red@TF_EXACT_GAUGE_ARGUMENT=True restored_green=True"
+ ],
+ [
+  "F-TF-SELECTOR",
+  "OK",
+  "pristine_green=True red@TF_EXACT_GAUGE_ARGUMENT=True restored_green=True"
+ ],
+ [
+  "F-TF-AFTER-ADD",
+  "OK",
+  "pristine_green=True red@TF_BEFORE_ADD_GAUGE=True restored_green=True"
+ ],
+ [
+  "F-TF-AFTER-FEE",
+  "OK",
+  "pristine_green=True red@TF_BEFORE_TRANSFER=True restored_green=True"
+ ],
+ [
+  "F-TF-AFTER-READY",
+  "OK",
+  "pristine_green=True red@TF_BEFORE_READINESS=True restored_green=True"
+ ],
+ [
+  "F-TF-REGISTRY",
+  "OK",
+  "pristine_green=True red@TF_REGISTRY_FIRST=True restored_green=True"
+ ],
+ [
+  "F-TF-OWNER",
+  "OK",
+  "pristine_green=True red@TF_OWNER_PAID_NOT_EXEMPT=True restored_green=True"
+ ],
+ [
+  "F-TF-FREE",
+  "OK",
+  "pristine_green=True red@TF_DAO_NO_CHECKER_DEPENDENCE=True restored_green=True"
+ ],
+ [
+  "F-TF-RETRO",
+  "OK",
+  "pristine_green=True red@TF_NO_RETROACTIVE_DRIP_GATE=True restored_green=True"
+ ],
+ [
+  "F-TF-RECORD",
+  "OK",
+  "pristine_green=True red@TF_TRUSTED_PAID_ACTIVE=True restored_green=True"
+ ],
+ [
+  "F-TF-FREE-EVENT",
+  "OK",
+  "pristine_green=True red@TF_DAO_NO_FACTORY_ALLOWED=True restored_green=True"
+ ]
+]

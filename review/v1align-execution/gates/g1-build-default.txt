@@ -1,0 +1,471 @@
+Compiling 36 files with Solc 0.8.30
+Solc 0.8.30 finished in 21.57s
+Compiler run successful with warnings:
+Warning (5667): Unused try/catch parameter. Remove or comment out the variable name to silence this warning.
+    --> test/fork/ForkFixture.sol:1197:70:
+     |
+1197 |         try IControllerVenue(CONTROLLER).gauge_types(gauge) returns (int128 absentTy) {
+     |                                                                      ^^^^^^^^^^^^^^^
+
+Warning (5667): Unused try/catch parameter. Remove or comment out the variable name to silence this warning.
+  --> test/fork/ForkAdmission.t.sol:65:78:
+   |
+65 |         try IControllerVenue(CONTROLLER).gauge_types(GAUGE_PRIMARY) returns (int128 ty0) {
+   |                                                                              ^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> test/CurveGaugeLister.t.sol:35:5:
+   |
+35 |     function get_gauge_weight(address) external view override returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/TrustedFactory.t.sol:857:5:
+    |
+857 |     function _assertFreeListing(World memory w, Candidate memory c, uint256 initialWeight, Vm.Log[] memory logs)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+    --> test/fork/ForkFixture.sol:1167:5:
+     |
+1167 |     function _assertCandidateProvenance(
+     |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+╭---------------------------------+------------------+-------------------+--------------------+---------------------╮
+| Contract                        | Runtime Size (B) | Initcode Size (B) | Runtime Margin (B) | Initcode Margin (B) |
++===================================================================================================================+
+| AdapterDepositCaller            | 1,365            | 1,396             | 23,211             | 47,756              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| AlwaysTrueTrustedValidator      | 182              | 211               | 24,394             | 48,941              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| ConfigurableTrustedValidator    | 1,614            | 1,645             | 22,962             | 47,507              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| ContractOwnerAdapter            | 3,672            | 3,905             | 20,904             | 45,247              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| CurveGaugeLister                | 15,226           | 17,588            | 9,350              | 31,564              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| DaoKillCallback                 | 602              | 633               | 23,974             | 48,519              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| EthSink                         | 326              | 357               | 24,250             | 48,795              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| FactoryClaimGauge               | 525              | 705               | 24,051             | 48,447              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| FaultyListerGetterPlatform      | 263              | 529               | 24,313             | 48,623              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| GarbageFlagGauge                | 373              | 572               | 24,203             | 48,580              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| GaugeValidationModuleModel      | 1,650            | 1,681             | 22,926             | 47,471              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| LegacyLpToken                   | 248              | 388               | 24,328             | 48,764              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| ListerCaller                    | 1,457            | 1,488             | 23,119             | 47,664              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockCampaignRemoteManager       | 3,867            | 4,455             | 20,709             | 44,697              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockCurveRegistry               | 2,124            | 2,155             | 22,452             | 46,997              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockERC20                       | 1,522            | 1,642             | 23,054             | 47,510              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockFeeDistributor              | 2,465            | 2,906             | 22,111             | 46,246              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockGauge                       | 387              | 519               | 24,189             | 48,633              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockIncentivePlatform           | 3,272            | 3,503             | 21,304             | 45,649              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockListingController           | 2,245            | 2,582             | 22,331             | 46,570              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockPool                        | 63               | 92                | 24,513             | 49,060              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| MockVotiumV2                    | 3,555            | 4,094             | 21,021             | 45,058              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| NoListerGetterPlatform          | 160              | 290               | 24,416             | 48,862              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| NoOpListingController           | 1,891            | 2,233             | 22,685             | 46,919              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| NoSelectorValidator             | 119              | 148               | 24,457             | 49,004              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| PoisonAddController             | 2,372            | 2,714             | 22,204             | 46,438              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| SafeToken                       | 86               | 141               | 24,490             | 49,011              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| TrustedFactoryModel             | 834              | 865               | 23,742             | 48,287              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| VoteMarketAdapter               | 6,889            | 7,473             | 17,687             | 41,679              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| VotiumAdapter                   | 4,921            | 5,440             | 19,655             | 43,712              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| WeightReaderRevertingController | 2,217            | 2,559             | 22,359             | 46,593              |
+|---------------------------------+------------------+-------------------+--------------------+---------------------|
+| WrongTypeListingController      | 2,334            | 2,676             | 22,242             | 46,476              |
+╰---------------------------------+------------------+-------------------+--------------------+---------------------╯
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ contracts/adapters/VoteMarketAdapter.sol:220:34
+    │
+220 │         uint256 executionEpoch = (block.timestamp / WEEK) * WEEK;
+    │                                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+   ╭▸ contracts/mocks/MockFeeDistributor.sol:46:26
+   │
+46 │         _lastTokenTime = (startTime_ / WEEK) * WEEK;
+   │                          ━━━━━━━━━━━━━━━━━━━━━━━━━━
+   │
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+   ╭▸ contracts/mocks/MockFeeDistributor.sol:67:17
+   │
+67 │             if (block.timestamp <= _lastTokenTime + TOKEN_CHECKPOINT_DEADLINE) revert CannotCheckpoint();
+   │                 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   │
+   ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ contracts/mocks/MockFeeDistributor.sol:155:36
+    │
+155 │             if (_canCheckpoint && (block.timestamp > _lastTokenTime + TOKEN_CHECKPOINT_DEADLINE)) {
+    │                                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ contracts/mocks/MockFeeDistributor.sol:173:28
+    │
+173 │         uint256 thisWeek = (t / WEEK) * WEEK;
+    │                            ━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ contracts/mocks/MockFeeDistributor.sol:177:17
+    │
+177 │             if (block.timestamp < nextWeek) {
+    │                 ━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ contracts/mocks/MockFeeDistributor.sol:178:39
+    │
+178 │                 if (sinceLast == 0 && block.timestamp == t) {
+    │                                       ━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ contracts/CurveGaugeLister.sol:632:20
+    │
+632 │             return (timestamp / WEEK) * WEEK;
+    │                    ━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[erc20-unchecked-transfer]: ERC20 'transfer' and 'transferFrom' calls should check the return value
+    ╭▸ contracts/mocks/MockFeeDistributor.sol:154:13
+    │
+154 │             IERC20Minimal(_token).transferFrom(msg.sender, address(this), amount);
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#erc20-unchecked-transfer
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ contracts/CurveGaugeLister.sol:766:13
+    │
+766 │         if (t > block.timestamp) revert DistributorUnusable();
+    │             ━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ contracts/CurveGaugeLister.sol:767:13
+    │
+767 │         if (block.timestamp - epochStart(t) > 20 * WEEK) revert DistributorUnusable();
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test/mocks/TrustedFactoryMocks.sol:134:91
+    │
+134 │                 factory.staticcall(abi.encodeCall(TrustedFactoryModel.get_gauge, (address(uint160(pool)))));
+    │                                                                                           ━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'uint160' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ contracts/CurveGaugeLister.sol:791:13
+    │
+791 │         if (IFeeDistributor(fd).last_token_time() != block.timestamp) revert DistributorUnusable();
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ contracts/mocks/MockListingController.sol:180:16
+    │
+180 │         return (t / WEEK) * WEEK;
+    │                ━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ test/fork/ForkFixture.sol:563:13
+    │
+563 │         if (block.timestamp != FORK_TIMESTAMP) {
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ contracts/mocks/MockIncentivePlatform.sol:100:58
+    │
+100 │                 Deposit({amount: amount, executionEpoch: (block.timestamp / WEEK) * WEEK, receipt: receipt});
+    │                                                          ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ test/fork/ForkKill.t.sol:193:20
+    │
+193 │         assertTrue(preCursor < block.timestamp, "safe pre-cursor strictly before now");
+    │                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+     ╭▸ test/fork/ForkFixture.sol:1128:32
+     │
+1128 │         bool fresh = t != 0 && t <= block.timestamp && block.timestamp - (t / WEEK) * WEEK <= 20 * WEEK;
+     │                                ━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+     ╭▸ test/fork/ForkFixture.sol:1128:56
+     │
+1128 │         bool fresh = t != 0 && t <= block.timestamp && block.timestamp - (t / WEEK) * WEEK <= 20 * WEEK;
+     │                                                        ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+     ╭▸ test/fork/ForkFixture.sol:1128:74
+     │
+1128 │         bool fresh = t != 0 && t <= block.timestamp && block.timestamp - (t / WEEK) * WEEK <= 20 * WEEK;
+     │                                                                          ━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/fork/ForkKill.t.sol:323:64
+    │
+323 │         _assertEscrowConfiscated(logs, address(t.lister), FEE, (block.timestamp / WEEK) * WEEK);
+    │                                                                ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+     ╭▸ test/fork/ForkFixture.sol:1129:60
+     │
+1129 │         return IFdVenue(FEEDIST).can_checkpoint_token() && block.timestamp > t + 86400 && fresh;
+     │                                                            ━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+    ╭▸ test/fork/ForkKill.t.sol:353:20
+    │
+353 │         assertTrue(block.timestamp - (sync / WEEK) * WEEK > 20 * WEEK, "beyond the 20-week horizon");
+    │                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/fork/ForkKill.t.sol:353:38
+    │
+353 │         assertTrue(block.timestamp - (sync / WEEK) * WEEK > 20 * WEEK, "beyond the 20-week horizon");
+    │                                      ━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/fork/ForkKill.t.sol:358:40
+    │
+358 │         emit log_named_uint("horizon", (sync / WEEK) * WEEK + 20 * WEEK);
+    │                                        ━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[erc20-unchecked-transfer]: ERC20 'transfer' and 'transferFrom' calls should check the return value
+    ╭▸ test/fork/ForkFixture.sol:690:9
+    │
+690 │         IErc20Venue(CRVUSD).transfer(to, FEE);
+    │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#erc20-unchecked-transfer
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/fork/ForkKill.t.sol:379:25
+    │
+379 │         uint256 wFrom = (refresh / WEEK) * WEEK;
+    │                         ━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/fork/ForkKill.t.sol:399:64
+    │
+399 │         _assertEscrowConfiscated(logs, address(t.lister), FEE, (block.timestamp / WEEK) * WEEK);
+    │                                                                ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/TrustedFactoryFixture.sol:377:22
+    │
+377 │         uint256 e0 = (block.timestamp / WEEK) * WEEK;
+    │                      ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test/fork/ForkVotium.t.sol:114:41
+    │
+114 │         _assertLedger(t, GAUGE_PRIMARY, uint8(k + 1), k == 3);
+    │                                         ━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'uint8' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+     ╭▸ test/Settlement.t.sol:1348:20
+     │
+1348 │         assertTrue(block.timestamp > fd.last_token_time() + 86400, "public path eligible without the fault");
+     │                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test/bountyfix02/AdapterConfig.t.sol:458:35
+    │
+458 │                 list[i] = address(uint160(i + 1)); // unique, nonzero, valid
+    │                                   ━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'uint160' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+     ╭▸ test/Settlement.t.sol:1941:20
+     │
+1941 │         assertTrue(block.timestamp - lister.epochStart(fd.last_token_time()) > 20 * WEEK, "beyond the 20-week horizon");
+     │                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+     ╭▸ test/Settlement.t.sol:2028:25
+     │
+2028 │             uint256 h = (cursor / WEEK) * WEEK + 20 * WEEK;
+     │                         ━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+     ╭▸ test/Settlement.t.sol:2110:24
+     │
+2110 │         uint256 week = (t / WEEK) * WEEK;
+     │                        ━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+     ╭▸ test/Settlement.t.sol:2137:20
+     │
+2137 │         assertTrue(block.timestamp > fd.last_token_time() + 86400, "public path otherwise eligible");
+     │                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[block-timestamp]: usage of `block.timestamp` in a comparison may be manipulated by validators
+     ╭▸ test/Settlement.t.sol:2138:20
+     │
+2138 │         assertTrue(block.timestamp - lister.epochStart(fd.last_token_time()) <= 20 * WEEK, "otherwise fresh");
+     │                    ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#block-timestamp
+
+warning[unsafe-typecast]: typecasts that can truncate values should be checked
+    ╭▸ test/Adapters.t.sol:384:33
+    │
+384 │             tooBig[i] = address(uint160(i + 1));
+    │                                 ━━━━━━━━━━━━━━
+    │
+    ├ note: consider disabling this lint if you're certain the cast is safe
+    │       
+    │       // casting to 'uint160' is safe because [explain why]
+    │       // forge-lint: disable-next-line(unsafe-typecast)
+    │       
+    │       
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#unsafe-typecast
+
+warning[erc20-unchecked-transfer]: ERC20 'transfer' and 'transferFrom' calls should check the return value
+     ╭▸ test/Settlement.t.sol:1272:9
+     │
+1272 │         token.transfer(address(lister), 777e18); // unsolicited donation
+     │         ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#erc20-unchecked-transfer
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/TrustedFactory.t.sol:173:33
+    │
+173 │         uint256 expectedEpoch = (block.timestamp / WEEK) * WEEK;
+    │                                 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/TrustedFactory.t.sol:886:13
+    │
+886 │             (block.timestamp / WEEK) * WEEK,
+    │             ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+    ╭▸ test/TrustedFactory.t.sol:916:34
+    │
+916 │                 assertEq(lEpoch, (block.timestamp / WEEK) * WEEK, "free GaugeListed epoch independently expected");
+    │                                  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    │
+    ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+warning[divide-before-multiply]: multiplication should occur before division to avoid loss of precision
+     ╭▸ test/TrustedFactory.t.sol:1046:39
+     │
+1046 │                 assertEq(receiptWeek, (block.timestamp / WEEK) * WEEK, "EscrowConfiscated receipt week");
+     │                                       ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+     │
+     ╰ help: https://book.getfoundry.sh/reference/forge/forge-lint#divide-before-multiply
+
+exit: 0
