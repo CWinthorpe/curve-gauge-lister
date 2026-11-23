@@ -73,9 +73,19 @@ Each row requires pristine-green / the named compiled mutant-red / restored-gree
 | F-TF-FREE-EVENT | Remove DAO-free GaugeListed emission | TF7 / TF_DAO_NO_FACTORY_ALLOWED complete event |
 | F-NB-SPLIT | Send only half R to FD while terminalizing/debiting gross R | test_KillAtEachReleaseCount / exact FD delta; no dummy bounty contract needed |
 | F-NB-WEIGHT | Restore controller-weight-zero as a kill signal | test_WeightZeroWithoutKilledFlagDoesNotConfiscate; preserve zero-weight live release control |
-| F-NB-HORIZON | Use t rather than epochStart(t) in freshness bound | test_AuditM01_AccountingHorizonIncludesPartialWeekEdges / H+1 near-end cursor |
+| F-NB-HORIZON | Use t rather than epochStart(t) in freshness bound | test_AuditM01_AccountingHorizonIncludesPartialWeekEdges / H+1 partial-week horizon guard liveness at cursor offset 1 (guard-level sensitivity); WEEK-1 mutant cell is not reached under frozen test selection; see VC-02 amendment below |
 | F-NB-ACCOUNT | Swallow mandatory checkpoint failure without atomic postcondition enforcement | test_CheckpointCooldownRevertsConfiscationUntilAccountingEligible and test_AuditM01_MidCatchUpAccountingFailureRollsBackEarlierQuarter / failure must revert custody and previous quarter |
 | F-NB-POST | Remove token_last_balance postcheck only | test_AuditM01_InvalidCursorAndIncompleteCheckpointRevert / cursor-only checkpoint |
 | F-NB-BIND | Remove onlyOwner from adapter setLister (each adapter separately) | test_Adapter_VotiumNonListerAndBindingRejects for Votium; test_AuditH01_PaidAdmissionRejectsUnboundOrMisboundAdapters or test_AuditH01_VoteMarketCaptureCannotSpendEthFloat for VoteMarket; require actual outsider bind refusal assertion |
 
 ABI falsifiers (separate from behavioral red counts): on disposable compiler-ABI JSON, independently append an unexpected callable, change constructor order, append a Listing field, change confiscation event indexing, remove a surfaced error and change mutability; the full manifest comparator must reject each and accept pristine. A selector-only comparison cannot catch several of these. Also reject a shipping import of any retired dependency. Preserve the full source/bytecode/ABI baseline evidence before any sensitivity work.
+
+## 4. VC-02 authority amendment — v1align-conf2
+
+ACCEPTED by the v1align-conf2 review authority for candidate 2c7c1f01c11bd7231887452f8e6d4a80ccd812b5, under plans/V1ALIGN-CONF2-BRIEF.md:14-28. This supersedes only section 3's F-NB-HORIZON first-discriminating-cell requirement. The original near-end wording and amendment request remain preserved in Git and review/v1align-execution/gates/AMENDMENT-REQUEST-VC02.md; no historical receipt is relabeled or rewritten.
+
+For the uniform epochStart(t)->t freshness-bound mutation and byte-identical final tests, accept pristine-green / mutant-red / restored-green at the offset-1 H+1 expectRevert(DistributorUnusable()) pair in test/Settlement.t.sol:2083-2084. The red proves H+1 partial-week horizon guard liveness: with the first partial-week cursor, removing the week floor wrongly permits the confiscation to return beyond the safe accounting horizon. This is guard-level sensitivity, not executed near-end mutant coverage or a reached allocation-loss assertion.
+
+The single test function loops through offsets [0, 1, WEEK-1] in that order (test/Settlement.t.sol:2023-2040). Its offset-1 H+1 failure aborts before WEEK-1; function-level selection cannot skip that earlier cell. Empty per-offset selections do not count as executions. This is the maximum honest executed sensitivity under the frozen witness and authorized uniform mutation, not a claim that a separately authorized test split could never reach WEEK-1.
+
+All pristine H-1/H/H+1 obligations at offsets 0, 1 and WEEK-1 remain binding. The product's floored 20-week bound, test bytes, compiled identity, inventory and every other falsifier requirement remain unchanged. No test edit, conditional mutant or production weakening is authorized by this amendment. Review ruling and fresh trace references: review/V1ALIGN-CONF2.md.
