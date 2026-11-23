@@ -1,0 +1,93 @@
+No files changed, compilation skipped
+test/Adapters.t.sol
+  AdaptersTest
+    test_Adapter_CompiledAbiSurfaceMatchesAllowlist
+    test_Adapter_ConfiscationMidCatchUpWithRealAdapters
+    test_Adapter_EndToEndFourQuartersSettleViaCheckpoint
+    test_Adapter_NoDrainFullPayloadsAsActualOwner
+    test_Adapter_OwnershipTransferTwoStep
+    test_Adapter_VoteMarketCampaignRequiresSourceChain
+    test_Adapter_VoteMarketConfigParamsFidelityAndMockGuards
+    test_Adapter_VoteMarketDuplicateGuardAndNonceReceipts
+    test_Adapter_VoteMarketEthShortfallRevertsAndRollsBack
+    test_Adapter_VoteMarketExactPullRecordedCampaignParams
+    test_Adapter_VoteMarketNonListerRejection
+    test_Adapter_VoteMarketReceiveIsOneWayFloat
+    test_Adapter_VotiumConfigOwnerOnlyAndPassedThrough
+    test_Adapter_VotiumDeterministicNonzeroReceipts
+    test_Adapter_VotiumHonorsVenueExclusionLimit
+    test_Adapter_VotiumNonListerAndBindingRejects
+    test_Adapter_VotiumRejectsCapBeyondRealBound
+    test_Adapter_VotiumRejectsUnsortedExclusions
+    test_Adapter_WrongTokenRejectedEverywhere
+    test_AuditH01_PaidAdmissionRejectsUnboundOrMisboundAdapters
+    test_AuditH01_VoteMarketCaptureCannotSpendEthFloat
+
+test/CurveGaugeLister.t.sol
+  CurveGaugeListerTest
+    test_AdmissionAllowsNativeCoinAndUnfundedPool
+    test_AdmissionChangeDoesNotRevalidateExistingEscrow
+    test_AdmissionRejectsInvalidAddressesLpAndKilledGauge
+    test_AdmissionRejectsUnknownPoolAndSpoofGauge
+    test_AdmissionValidatesCoinCountAndAddresses
+    test_AuditH01_ReadinessGetterFailuresAndZeroShareExemption
+    test_ConstructorRejectsAliasedEndpoints
+    test_DaoZeroFeeListingNeverDrips
+    test_DistinctAuthenticatedGaugesForSamePoolCanList
+    test_DoubleListingRejectedAcrossAllPathsAndTerminalStates
+    test_ListingFailureRollsBackFeeAndRegistration
+    test_NoOwnerWithdrawalOrArbitraryExecutionSurface
+    test_OnlyOwnerCanConfigureAdmissionAndPlatforms
+    test_OwnerPauseOnlyBlocksPermissionlessAdmission
+    test_PaidListingTransfersExactFeeIntoEscrow
+    test_PaidListingUsesZeroWeightAndMembershipOnly
+    test_PlatformChangesCannotRedirectExistingEscrow
+    test_TwoStepOwnershipTransfer
+
+test/Settlement.t.sol
+  SettlementTest
+    test_AdapterCannotReenterListingReleaseOrConfiscation
+    test_AuditM01_AccountingHorizonIncludesPartialWeekEdges
+    test_AuditM01_InvalidCursorAndIncompleteCheckpointRevert
+    test_AuditM01_MidCatchUpAccountingFailureRollsBackEarlierQuarter
+    test_AuditM01_StaleFortyWeekDistributorRevertsAndSafeRetryAllocatesAll
+    test_CheckpointCooldownRevertsConfiscationUntilAccountingEligible
+    test_ConfiscationTransfersOnlyKilledGaugeBalance
+    test_FourEpochQuarterRelease
+    test_GaugeFlagReadFailureCannotSettle
+    test_GaugeFlagReadFailureMidCatchUpRollsBack
+    test_KillAtEachReleaseCount
+    test_KillViaGaugeFlagOnlyConfiscates
+    test_KilledFeeDistributorRevertsWithoutAlternativeRecipient
+    test_KilledFlagTrueAtMaturityStopsMidCatchUp
+    test_MissedEpochCatchUpIsBoundedAndPreservesMaturityLabels
+    test_ObservedConfiscationStaysTerminalAfterFlagCleared
+    test_PlatformSplitsAndZeroShareRouting
+    test_ReceiptMustBeFundedAndAllowanceCleared
+    test_ReleasableUsesGaugeFlagOnly
+    test_SecondPlatformFailureRollsBackWholeCheckpoint
+    test_SettlementNeverReadsControllerWeight
+    test_TerminalStatesSkipKillOracleReads
+    test_ThursdayBoundaryAndOneSecondEdges
+    test_TokenFalseReturnEmptyReturnAndTransferTax
+    test_WeightZeroWithoutKilledFlagDoesNotConfiscate
+
+test/TrustedFactory.t.sol
+  TrustedFactoryTest
+    test_TF_CheckerReadFaultsFailClosed
+    test_TF_ConstructorPinAndGuards
+    test_TF_DaoFreeLaneIsTrustIndependent
+    test_TF_LegacyFactoryAndNonFactoryPolicy
+    test_TF_RegistryAuthenticationPrecedesTrust
+    test_TF_TrustIsAdmissionOnly
+    test_TF_TrustedPaidAdmissionAndExactTarget
+    test_TF_UntrustedPaidAdmissionBeforeEffects
+
+test/bountyfix02/AdapterConfig.t.sol
+  AdapterConfigR2Test
+    test_R2_GasSettingsRejectOverflowWithoutMutation
+    test_R2_GasSettingsWorstCaseBoundariesAndExclusionGrowth
+    test_R2_RejectedGasSettingsPreserveFundedCheckpoint
+    test_R2_VoteMarketConstructorDistinguishesLocalAndRemotePins
+    test_R2_VotiumConstructorRejectsCodeLessPins
+

@@ -1,0 +1,59 @@
+START=2026-11-24T01:47:57+04:00
+fork preflight: verifying pinned header at block 26401019 via https://ethereum-rpc.publicnode.com
+fork preflight: chainId=0x1 number=0x192d8fb hash=0x55810b079923a14fb97ad548f5024f65530dbc4fb2357a38f41e13b3d27cb6d3 timestamp=0x6af61657
+fork preflight: pinned block 26401019 hash 0x55810b079923a14fb97ad548f5024f65530dbc4fb2357a38f41e13b3d27cb6d3 VERIFIED — proceeding
+No files changed, compilation skipped
+
+Ran 3 tests for fork/Admission.t.sol:AdmissionForkTest
+[PASS] test_Fork_ControllerSeatingAndUnseatedRollback() (gas: 7114680)
+[PASS] test_Fork_DaoFreeListingNeverEscrowsOrDrips() (gas: 6650205)
+Logs:
+  DAO crvUSD (observation): 0
+
+[PASS] test_Fork_PaidListingTransfersExactFeeAtZeroWeight() (gas: 6754817)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 631.82ms (79.81ms CPU time)
+
+Ran 2 tests for fork/TrustedFactory.t.sol:TrustedFactoryForkTest
+[PASS] test_Fork_TF_LegacyTrustedFactoryAdmission() (gas: 6931874)
+[PASS] test_Fork_TF_SsNgTrustedFactoryAdmission() (gas: 6711034)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 1.22s (1.22s CPU time)
+
+Ran 2 tests for fork/Votium.t.sol:VotiumForkTest
+[PASS] test_Fork_VotiumFourWeeklyTranchesFundRealActiveRounds() (gas: 8600382)
+[PASS] test_Fork_VotiumLateCatchUpPreservesScheduleNotHistoricalRounds() (gas: 8042493)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 652.61ms (102.58ms CPU time)
+
+Ran 3 tests for fork/Kill.t.sol:KillForkTest
+[PASS] test_Fork_ConfiscationRequiresFreshAccountableFeeDistributor() (gas: 14081397)
+Logs:
+  fd.admin: 0x40907540d8a6C65c637785e8f8B742ae6b0b9968
+  stale cursor: 1794512471
+  stale now: 1818704471
+  horizon: 1806537600
+
+[PASS] test_Fork_MidDripKillStopsLaterTranchesAndSeizesRemainder() (gas: 9054057)
+[PASS] test_Fork_RealGaugeKillRequiresItsActualAuthority() (gas: 13460460)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.77s (1.27s CPU time)
+
+Ran 3 tests for fork/VoteMarket.t.sol:VoteMarketForkTest
+[PASS] test_Fork_MixedSplitFourWeeksFundsBothRealVenues() (gas: 12549778)
+Logs:
+  laPoste nonce: 3511
+  laPoste nonce: 3512
+  laPoste nonce: 3513
+  laPoste nonce: 3514
+
+[PASS] test_Fork_RealCRMRejectsWrongChainAndUnlistedPlatform() (gas: 24293887)
+Logs:
+  laPoste nonce: 3511
+  laPoste nonce: 3511
+
+[PASS] test_Fork_VoteMarketEthShortfallRollsBackMixedCheckpoint() (gas: 8642223)
+Logs:
+  laPoste nonce: 3511
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.78s (1.27s CPU time)
+
+Ran 5 test suites in 1.84s (6.06s CPU time): 13 tests passed, 0 failed, 0 skipped (13 total tests)
+FORK_RC=0
+END=2026-11-24T01:48:01+04:00

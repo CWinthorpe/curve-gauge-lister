@@ -1,0 +1,654 @@
+{
+ "AdapterCustody.sol/AdapterCustody.json": {
+  "abi_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "creation": {
+   "executable_sha256": "b5221a947315a69ca06d2cfb11e9f898e1eea3c29f3b1bb7399ee4c0d5e5d69f",
+   "full_sha256": "7b72060155bb525867686c12898ca676c4ba3961d31a345f2e82c19c5abaa10a",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a264697066735822122047c9fbb0ff32957de1cc4aadcee7500e106befa49237ca713e5f85c596ff5dd464736f6c634300081e"
+  },
+  "file_sha256": "e844edf3cfc39c4d4ff097267d6c7897a36e6901cafa1946fc4c28e4eaac6eb4",
+  "methodIdentifiers_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "runtime": {
+   "executable_sha256": "267faea273650164ffd9fffd94f75242e663cb854ff19fc585c5f0188f9df87a",
+   "full_sha256": "783c94140d275d015438c29dc86aaf4e1e46c4de2d5878d5e9b2a378a4974178",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a264697066735822122047c9fbb0ff32957de1cc4aadcee7500e106befa49237ca713e5f85c596ff5dd464736f6c634300081e"
+  }
+ },
+ "AdapterOwnable.sol/AdapterOwnable.json": {
+  "abi_sha256": "cfa0c3238efca8797873857707f4c5d4d3906887e37ee655a5c2e06ba225923a",
+  "file_sha256": "7c69d95fb1ed608cdfc62e19f2859a809e8203e43a980788f0c945894da16e51",
+  "methodIdentifiers_sha256": "d9ee80b84c37072f99f7ffa18d16cc1b031610206b46397ad815606a550cf6d2"
+ },
+ "Admission.t.sol/AdmissionForkTest.json": {
+  "abi_sha256": "a5ba63a93c5992d1a60abad8034c8b47c47a71b08617bd314fe7533b52021f77",
+  "creation": {
+   "executable_sha256": "ab0bb04a5db9f6f94d8d4b27f2d4a8b91c5569a895f471c8de7b40f1a5ea8183",
+   "full_sha256": "f286145b9dac8c87113549b70a1a81e270cf5f953d8a075ce33a754f12c36712",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220f26358b11cca9009cffcb01f0d0e4ecc5e6e6643b2525de03b7d4b4f729ca4ca64736f6c634300081e"
+  },
+  "file_sha256": "7da0a0f06f612931663141a3ec173ea05d098901a246305ea4b2509da4580965",
+  "methodIdentifiers_sha256": "e7f4157e29cb77b59c325ec688a3ecd1e888e51a21ec0150201629be32d37d09",
+  "runtime": {
+   "executable_sha256": "904fabd0236626e1bd4c7fd94d150f9edb61d52c5b36bbab115a21a1a7e7b695",
+   "full_sha256": "724c7cd3cca61ccbded06aa5d227c730562b8cf2aead093fd3f9613b1b3ddc85",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220f26358b11cca9009cffcb01f0d0e4ecc5e6e6643b2525de03b7d4b4f729ca4ca64736f6c634300081e"
+  }
+ },
+ "CurveGaugeLister.sol/CurveGaugeLister.json": {
+  "abi_sha256": "0341bebdd49132a0df7930fdd4a9dc62127ddbe6020df11f4348981489fc68e9",
+  "creation": {
+   "executable_sha256": "d316f8a3cef30cb43cf555c17e59f39763d0929667412968953e759b6b1ed6f5",
+   "full_sha256": "e3560e0efabaad7c94a2d4bbdb28fbec01a1d914d3d7be7ca709c578bc71daa7",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212201e59f32e13b12f9eb3e1150fbc1357ccf2058cb1fa92f61c18b8c3f2485efc4164736f6c634300081e"
+  },
+  "file_sha256": "b29f4e574f702ad93757b3d17028b1065be5c100d80166131e96862b87d11215",
+  "methodIdentifiers_sha256": "3aba770fef397f6c1bab0c909a56f5565d80faf039ca937980bc0b4b650577d5",
+  "runtime": {
+   "executable_sha256": "371c5cb74890f8ad0f44b215a4bcbb5f23884f79ff3ae0592c8955b7511437bb",
+   "full_sha256": "67a31f1c7e187686ecaceeb4607cd345f83bc02396cbec37c5a657f836b9a03e",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212201e59f32e13b12f9eb3e1150fbc1357ccf2058cb1fa92f61c18b8c3f2485efc4164736f6c634300081e"
+  }
+ },
+ "CurveWeek.sol/CurveWeek.json": {
+  "abi_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "creation": {
+   "executable_sha256": "b5221a947315a69ca06d2cfb11e9f898e1eea3c29f3b1bb7399ee4c0d5e5d69f",
+   "full_sha256": "a55e99cc3e2628bae43938b34e68a445a9d1d68eb3abfd692626671060052943",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220a8edb31ca9818d4bfb7653ae9a4b99158877bddb0c6136e6c86098315d33e87e64736f6c634300081e"
+  },
+  "file_sha256": "2705d27901f38ae218779f2c9fe93d960e6e26e306a379c3df4377eab087f3c2",
+  "methodIdentifiers_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "runtime": {
+   "executable_sha256": "267faea273650164ffd9fffd94f75242e663cb854ff19fc585c5f0188f9df87a",
+   "full_sha256": "110624c02240ee4459bf51acbebd37b633ddd3b9ac18743630e383c19125c180",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220a8edb31ca9818d4bfb7653ae9a4b99158877bddb0c6136e6c86098315d33e87e64736f6c634300081e"
+  }
+ },
+ "ForkAdmission.t.sol/ForkAdmissionSpec.json": {
+  "abi_sha256": "a5ba63a93c5992d1a60abad8034c8b47c47a71b08617bd314fe7533b52021f77",
+  "file_sha256": "91ee791b13b61a81a909f6a6e0eaad4ca71ec66d1405295a5128ddf269e32d66",
+  "methodIdentifiers_sha256": "e7f4157e29cb77b59c325ec688a3ecd1e888e51a21ec0150201629be32d37d09"
+ },
+ "ForkFixture.sol/FVm.json": {
+  "abi_sha256": "403985d0715ee43a0b21f3c3ecb71f6527eb6f9f9722b12b20dcb43c8acb48e0",
+  "file_sha256": "37dc2dedca1c86f05160d38272d27e3d50a0a210f27a170bf343cb3cebb41a4d",
+  "methodIdentifiers_sha256": "71313c2b6cb5a335e860218f7287bac894364bd18522e833fa83de714fd87323"
+ },
+ "ForkFixture.sol/ForkFixture.json": {
+  "abi_sha256": "b82df3f577718b34af06fbb7497ebe890e2be11faeea6d7007f4e7468ba0d73a",
+  "file_sha256": "c9362e96f772c1e8aff68b60269c6fc1469c29f2f529ced4ac7122105fdadbc8",
+  "methodIdentifiers_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+ },
+ "ForkFixture.sol/ICcipAdapterVenue.json": {
+  "abi_sha256": "9bc2bd817d23c3b03b39ecc622db0ece25019c34ffbed38625f95fd7a8495302",
+  "file_sha256": "7147408edd626d86f3530997708028adcc3712485b083ee273f95df2ec47c537",
+  "methodIdentifiers_sha256": "f37edc44aef803407178eac9cb1dac7704067af3df6558977b721d5c43d0e335"
+ },
+ "ForkFixture.sol/IControllerVenue.json": {
+  "abi_sha256": "7c13fe4d0df20d520aece0c2a49f9de378698a734f424f80d0702ad0c2b349e7",
+  "file_sha256": "7b5be756fdbdf67e5a4aedd263725ab9e59f622f8819e2f18f51d4d1fc1252a9",
+  "methodIdentifiers_sha256": "1e97c5e6ee08f6e3e67676b587d59239889722f24791b4f21998f548ecc0dc05"
+ },
+ "ForkFixture.sol/ICrmmVenue.json": {
+  "abi_sha256": "6426112fd88baf6ef0cf0652affe6672e51f8523aae876ef7c9da7a9a197e620",
+  "file_sha256": "7b2d32fa7cdebc2188f993681fcd1d249ae89e0044b27a8f753b4a03de2d5eea",
+  "methodIdentifiers_sha256": "15af72f7107896e3296f41243e6572d7378eb3d7a68399e38daac9daabe3e58b"
+ },
+ "ForkFixture.sol/IErc20Venue.json": {
+  "abi_sha256": "c70152fd86fc1c3db8ac7d965f28595dc46a73ac0bf32c29d8094755b5903b77",
+  "file_sha256": "64d421b0984e96f36cb8c776b31190a4967e59f5c8cfacc380fb16a7883d7076",
+  "methodIdentifiers_sha256": "ca97926612cd984f642364ad3db61ce395e9387510b3a3b446edd2f57d18fd66"
+ },
+ "ForkFixture.sol/IFactoryVenue.json": {
+  "abi_sha256": "f59e39f4f96521aa9f446256b5064f69298b336fb83c2699e05fbe29c986360a",
+  "file_sha256": "bc2002560526b7ba39dd2a14ae7e8e7c61aabd115f06d86519a8005155756b47",
+  "methodIdentifiers_sha256": "4b07e77368e812dad7e94424ecb62658ee5f2bc89585f17f6add523bd4e6378d"
+ },
+ "ForkFixture.sol/IFdVenue.json": {
+  "abi_sha256": "27a856f665f220f4e4097090f43225bf69e9ab3c8afa3a010307c2754eca5dc6",
+  "file_sha256": "4ecf0b3f4022bdf995011648553c8f7951e4a939643f3f6b9ce84d86c479816d",
+  "methodIdentifiers_sha256": "8d62009d899826be6ed40c8e88a8b0cc24f32580a3b66a44e9bddc5f5104eb18"
+ },
+ "ForkFixture.sol/IGaugeVenue.json": {
+  "abi_sha256": "227935e33854c4b9ce24f579bbfa4c5d98b8095fb37ee127470572fa9c472f18",
+  "file_sha256": "ca49a76151d50a9809f4f9e12d098acd9127aa86dd977ed1a2a1a530be8c32b6",
+  "methodIdentifiers_sha256": "ad1ab1e7d7d1891e028765b0410477ea3fd3d53cca7a88fa6c5e1a46ace3ca66"
+ },
+ "ForkFixture.sol/ILaPosteVenue.json": {
+  "abi_sha256": "1ff88aedbdc7188acae1a0462867b1ddd4f127bb934d0da5d1e35c4e1311d85d",
+  "file_sha256": "6c0089fdc5353b3f243b8349e079b27668603398abe80fa92fec3dce277694ea",
+  "methodIdentifiers_sha256": "8b82bf52eaf5692bd84ac77530cc03d6a2de686552a6aec64f155b4d865d835e"
+ },
+ "ForkFixture.sol/IMetaRegistryVenue.json": {
+  "abi_sha256": "090d5a162580f4dc24308c601cd1db26dde8400d94b72607d202e5771ab6ff0a",
+  "file_sha256": "b778395debc8f3af24705d18a42f9e513bf5589e000073ba301ac531b424b665",
+  "methodIdentifiers_sha256": "a06809806ac69b242a6f812ac4e65f3eabac0f5e58065d444ff369de04aa8f95"
+ },
+ "ForkFixture.sol/IProxyVenue.json": {
+  "abi_sha256": "d303aa5e0eaf0d4446463b3482f2ecc0c4fa6ccaac0ac0657be00de621dd00e8",
+  "file_sha256": "2a8148001a1acedcb6ea4950bb49fdbf5d967aa31bebcd4d362cc5a901305e1e",
+  "methodIdentifiers_sha256": "5bd51412146215eb6385284cdff7287e623cb7c92e593968fd99ec68a61d1046"
+ },
+ "ForkFixture.sol/IRouterVenue.json": {
+  "abi_sha256": "2f949968bd6c36bd95bf98e0a06f3cfdc2b96be1dcc27c09124b7a3749f7f49b",
+  "file_sha256": "bb1878d12a4226c19fd9cb6f2a0cfabde812b4423df3320c02591afbe5cfb8b3",
+  "methodIdentifiers_sha256": "29a69d82b66a2db8e9c8ff68a6be8765430559b181f5088a2c6998e289277786"
+ },
+ "ForkFixture.sol/ITokenFactoryVenue.json": {
+  "abi_sha256": "7e2d761cfb08785f3d03a2d6a377eb24373f60281644735f65096e8c95b4b4c8",
+  "file_sha256": "8436c4c6c52fcac0dc457b25382a862fae9b9e98600f253c44ee64306c12c3b3",
+  "methodIdentifiers_sha256": "e7eecad4cc05df39ac6b2152cb01552f954017425b1b71f1068f6c9df7b428c5"
+ },
+ "ForkFixture.sol/IVotiumVenue.json": {
+  "abi_sha256": "5b9340b1b8b466e4d04f3b40b0370b0e2b512d33368f94e64c14a998e6c7aea2",
+  "file_sha256": "795fe040758754e5e41122375f75ab01251b197806cfc74545fb770ffafe99a8",
+  "methodIdentifiers_sha256": "085c99a10041ac480bb0befc905df49b7137c01f401a8797631051fb0c06fc7f"
+ },
+ "ForkKill.t.sol/ForkKillSpec.json": {
+  "abi_sha256": "d7a8f2079d1c889cb5f046084e969258fd1baa3d0389d435dcfc20bd0804dbee",
+  "file_sha256": "98939d0bbed8754bcb5c29470842ee3576c307cc36ef17cded5c1b0047dbbff9",
+  "methodIdentifiers_sha256": "566a8da8b21cb6db4d30ffbc4e8c90f321217e544f1e3bcaf70d58fe609307ce"
+ },
+ "ForkTrustedFactory.t.sol/ForkTrustedFactoryScenarios.json": {
+  "abi_sha256": "a0e3f72542b34c468f554a2325c2da159ded15f26eea7c5f0ca35d1c206cf04f",
+  "file_sha256": "d3790fdb7c3e343bdb606c10b113d0cf9298a14f7f8bbc45ebde056372b0a3a4",
+  "methodIdentifiers_sha256": "f79bb1dfcbb2df468dfd3fe6817d424bfd41358cfa73d1fec49ca63b3a3a88e4"
+ },
+ "ForkTrustedFactory.t.sol/IFactoryReverseVenue.json": {
+  "abi_sha256": "2a4a324fb3c452daaec0f9a77edfee53365e1d58747a2c182a6c804a54f7b1d1",
+  "file_sha256": "d536caff1b745ae915491c2d72c6ea02d6098b098844c09041101e89e3e42d37",
+  "methodIdentifiers_sha256": "f8f8a14d35ab90fdc20e500c062c6804774e46e6993d6ca510d14e70e8c5ca56"
+ },
+ "ForkTrustedFactory.t.sol/ILpMinterVenue.json": {
+  "abi_sha256": "21ac36becf681c109e2bc064dee3dab3b0a7bb4887b96c2ab7092c5eaab92c66",
+  "file_sha256": "4a264b4e36063d551fdb052e1eb8862e53c8ab1416076aa0021cb8a69b18f442",
+  "methodIdentifiers_sha256": "bb0d6ba2e31def4924daf59b4d3a23b5707b945f059bf06358b57c8946efc5e6"
+ },
+ "ForkTrustedFactory.t.sol/ITrustedValidatorVenue.json": {
+  "abi_sha256": "49b777c6b58a517f6dd8bd9b6ad53a52b9bc055012c9f4c130550223181ff6f8",
+  "file_sha256": "ffcc861346af774bf3282a47d81f29db774f0625a454248252007ad847247424",
+  "methodIdentifiers_sha256": "15e8e5d251529b3d01854ea99b1242d307461ade16822642adb26a34b2fe8c07"
+ },
+ "ForkVoteMarket.t.sol/ForkVoteMarketSpec.json": {
+  "abi_sha256": "4b7269b36ece12ad7bc4acf542ab0029f6773e7f0c8c99d244618fb7e2d396c5",
+  "file_sha256": "dbd284c93a2886202313ba94466acb4e724b5c33432df76b12f2ddf737a4e80d",
+  "methodIdentifiers_sha256": "1251883292c300a48b4898ecd8752397bd20f56bb78e7fa063808d27716467a3"
+ },
+ "ForkVotium.t.sol/ForkVotiumSpec.json": {
+  "abi_sha256": "6db0aa42ed58ca468fff864f840606bc22915223626e62703ee9c1d5ee0c8ab9",
+  "file_sha256": "da9b3f3274859a5fe16c5f6854e022aa3fe80c182bc5b41a0d5d9d352d07b7c0",
+  "methodIdentifiers_sha256": "1acf480c70f7307c2af22a0d9ad4c34fd9d70f10266962341bff45c3f9c33f98"
+ },
+ "ICampaignRemoteManager.sol/ICampaignRemoteManager.json": {
+  "abi_sha256": "0f088166a0dae2270f420abaf54722dba3e241cfb9fba6ebaaa0d344114567ca",
+  "file_sha256": "bfe21f341b9273e70ed5a1d63ccc61f6153ffb30fb1dad236607d30de8eafeaf",
+  "methodIdentifiers_sha256": "74f8bd2c36a17ef046742cede1757da03de4b2ea321bd157ec0d362f7bb00d27"
+ },
+ "ICurveGauge.sol/ICurveGauge.json": {
+  "abi_sha256": "1a891a0ab5cfad6dfcb57d3c5edbd8727320c9d14950a2af906d0a1204d38f3d",
+  "file_sha256": "791d1a1484df49e18c8663e17700e85049bbc991c413536584153c0e87d72b84",
+  "methodIdentifiers_sha256": "05629ef2fab66afa58b9076022b6b58ec5442b081c86c105bf6a1c8e50658068"
+ },
+ "ICurveRegistry.sol/ICurveRegistry.json": {
+  "abi_sha256": "c705052f90bff33fe6518d1b9904ec3865bb2c8451a366fc51bf2e111b69866d",
+  "file_sha256": "8f52fb3bcada08ac8c90ce4dd0cd067b51cc8190526199fb8a95623580855b0d",
+  "methodIdentifiers_sha256": "1b01a68a330915c596e2154c15f9e2ab4923b223cd51b4d6572ecb33f1a74e21"
+ },
+ "IERC20Minimal.sol/IERC20Fixture.json": {
+  "abi_sha256": "f2b5dd78dd0d7936d27cd9f008dd3733b13ea015360f6275f7038de1a859afc9",
+  "file_sha256": "c39995aef21816cb513d50e355b5c9e55d3cf573413dcf6a7778af0f04116da5",
+  "methodIdentifiers_sha256": "5fd019a4bb32341a4edc849db7dfcaacdd61d467cfa42067c01bd0f8ecc63ae8"
+ },
+ "IERC20Minimal.sol/IERC20Minimal.json": {
+  "abi_sha256": "59d6fd3e2bdbacef7376ac3399abeccb569947893f57b88486bc28aed09cda60",
+  "file_sha256": "24ec55aab2a7ed68a2b7208946ae1e9ce984d74b64cc02f1b2610c5c9f155fd7",
+  "methodIdentifiers_sha256": "77e6948241ffd9c754bb2666d714b7af7c61303f736300937c45dfbac335d83e"
+ },
+ "IFeeDistributor.sol/IFeeDistributor.json": {
+  "abi_sha256": "acdf5d49347da8749163e1a4c1f7151ddd4e03f92f892c7891b1e3d394c27b6a",
+  "file_sha256": "049be41bdae2b4d2030ae985273399c2ca4119b058c0d30ec07bd711b5a81ef7",
+  "methodIdentifiers_sha256": "55d691cc6827ecc77dd377258fd2ffb359541f490683ec3b54234970882ddc03"
+ },
+ "IIncentivePlatform.sol/IIncentivePlatform.json": {
+  "abi_sha256": "94064cb57f51cd05c42d932fc5f8fe4b8208adf3ab30b2e7f7858ca7be405bdf",
+  "file_sha256": "dc1b66b7264d6b53af98c242fe22eab9abef65ab90da3218828ae949f52a6bcc",
+  "methodIdentifiers_sha256": "8cd72cad26d048dad73325d969d4825731724dff8e484c5bc3d0ccc257b54673"
+ },
+ "IListingController.sol/IListingController.json": {
+  "abi_sha256": "96455e12145c95ff24d0c8063fec8120bef8ac8ea31a64dff42c9c04d5bac3e3",
+  "file_sha256": "402af65417204f391651ad3102b0ad15edc29110d43b687371b1157476ec2e1b",
+  "methodIdentifiers_sha256": "ba492a0c49407f86c31025a58eca3ae4fbb4127b0383dbe5ae410d92ef1faa18"
+ },
+ "ITrustedGaugeValidator.sol/ITrustedGaugeValidator.json": {
+  "abi_sha256": "36665aa441f8614009d80f867ec5c0f70b40a14b09b33b536e0a856be10e36ce",
+  "file_sha256": "a0ff7b125d46edf7bbae0990e4c74ad9cb366e4d0ab9f7b186962807044c006a",
+  "methodIdentifiers_sha256": "80561dd01da6b6cb238054a165e19e9a448de376137e9a2b954ae098b801ceb8"
+ },
+ "IVotiumV2.sol/IVotiumV2.json": {
+  "abi_sha256": "ec4a900a538dc36de791cac434ea8de8da8d0c3e293c28ab9f0db9a17abd9889",
+  "file_sha256": "9c320ce590e9130b5e45656683e1ef149e026a3ce465d569b779274640687471",
+  "methodIdentifiers_sha256": "385fe6a23f1721d77b6d0b89d3778414dedcc72505d6461bee0cb8120c74085f"
+ },
+ "Kill.t.sol/KillForkTest.json": {
+  "abi_sha256": "d7a8f2079d1c889cb5f046084e969258fd1baa3d0389d435dcfc20bd0804dbee",
+  "creation": {
+   "executable_sha256": "912936435700b953441a1219def710b223fb0adaa6fb888c1096afb247054940",
+   "full_sha256": "4815d1562d48ba8af9becca93cda0590939fef571cc2b70b52aa65d5861f4714",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212203dd628cd9e42b0637187c7c1da88704812587802829e290709dfeb8ef5b5a80964736f6c634300081e"
+  },
+  "file_sha256": "5eb9055df2c22290914865482e688b5558c83854e922529cc73e383565053005",
+  "methodIdentifiers_sha256": "566a8da8b21cb6db4d30ffbc4e8c90f321217e544f1e3bcaf70d58fe609307ce",
+  "runtime": {
+   "executable_sha256": "d45d8e673b27ff5e3351f76428ebdb232fdb4654ae2afd5751b9a4a83209d52b",
+   "full_sha256": "712bf2cf0952a54bc537ba3cc2363dd286ac9a95dcbc1abbdef10cda9c9605c5",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212203dd628cd9e42b0637187c7c1da88704812587802829e290709dfeb8ef5b5a80964736f6c634300081e"
+  }
+ },
+ "MockCampaignRemoteManager.sol/MockCampaignRemoteManager.json": {
+  "abi_sha256": "a8835a0990e44b54cd4ed6371b6336e7467f2d3672781359f2c7af6cea34c368",
+  "creation": {
+   "executable_sha256": "073afa07ee5f9ab5bcee1dff5af66a4ee9f27c0394eae9ac3d14c2f1d8ed71de",
+   "full_sha256": "347aa660e9d572313b3a1b7e8013986c3c4a845ed073b1522137a636bc1c1eca",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212201fb1cd3b4e853d34030db5c1c7fa5dee0ee1bd48c3f58d7a24ea48b595e6cf9764736f6c634300081e"
+  },
+  "file_sha256": "d85c4ceb5a8c402121435b34e92202fe046f75b3d4ba611d99236aab6152ae0d",
+  "methodIdentifiers_sha256": "8800d859b54a8279062b4c19dbfef710e771e41e80232e4dccfca08e76ce9be9",
+  "runtime": {
+   "executable_sha256": "eded82550e191dacc4b2b8c8fb10e9ed70fdf3f21ecd7e977390c429506f9ec9",
+   "full_sha256": "37cff35a212b54577b1571a97a748334f7007ce18c6886362486abd999137829",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212201fb1cd3b4e853d34030db5c1c7fa5dee0ee1bd48c3f58d7a24ea48b595e6cf9764736f6c634300081e"
+  }
+ },
+ "MockCurveRegistry.sol/MockCurveRegistry.json": {
+  "abi_sha256": "fb93f009134115cd56fb294e088a9f7ee621fc2f4cedbf1d30e4025a9bbec96b",
+  "creation": {
+   "executable_sha256": "bbd5389da8ab2c5ca695b3ffe568fd44c1499586b2928cc85e74c2d7e9e9a458",
+   "full_sha256": "47c5a85ca9d4bed510b7ca012bb4e20ad41f4f7fd67b02b708d6287fc77c900a",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212203160111f9d913c31db153779bc37bc678a0cd3da34d0a870730dfde1c0e31e5364736f6c634300081e"
+  },
+  "file_sha256": "1cecc4019a068d83361a58ea1eba19a6bf73a01a995e160c52166ca43d1316a5",
+  "methodIdentifiers_sha256": "02e1f2c8c7cdf2b59a9a2ba97e18c34bd2e642635b17d041dd9d74c36df74d98",
+  "runtime": {
+   "executable_sha256": "5daa73dc17944e4f1bb22b3aa72120dbab6f3065ee6a312342a83e97dc5f4107",
+   "full_sha256": "9244e3f4dca4ec4c39aa9702d889a9d078e5df47b911caea4ed704e776fc0048",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212203160111f9d913c31db153779bc37bc678a0cd3da34d0a870730dfde1c0e31e5364736f6c634300081e"
+  }
+ },
+ "MockERC20.sol/MockERC20.json": {
+  "abi_sha256": "3f56c5201cb4a4741f986c012b985bf9885589e9b8634b677599511158b7f0f9",
+  "creation": {
+   "executable_sha256": "fbcc6f038ebcb51f33126dbd7a1b221096a406cd7bbd711ff7bc1ab0e613f56f",
+   "full_sha256": "b692cb04c67fab7fa5d1136e866543f592eb4b90bb069dc80a6ed23b7667b038",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220a48c491103c76db1189684d653192fb1582b159d01f014ab446dc3d9aced484164736f6c634300081e"
+  },
+  "file_sha256": "f6e99b8fb99b46906dedd729e0b0120417a9af0d59c31f63ff4fcba37bee7d7e",
+  "methodIdentifiers_sha256": "781a705687ef07eed9d673fb12e45575982cf5a15f3dfe955ad7cc4218db6790",
+  "runtime": {
+   "executable_sha256": "511e62ff614927cc5ca81a163ffb0d2cc0673513e6d41a48236d3f2ee61edcdb",
+   "full_sha256": "7ad43b49feaa6b3830703dc38ce6a842b8fc8e9faa7ef349805ddd95132ece0d",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220a48c491103c76db1189684d653192fb1582b159d01f014ab446dc3d9aced484164736f6c634300081e"
+  }
+ },
+ "MockFeeDistributor.sol/MockFeeDistributor.json": {
+  "abi_sha256": "8c92021f05b2b37ce1a4295ef18c0b116cd3f5d1a9d5063f60fafc3f99b013a3",
+  "creation": {
+   "executable_sha256": "a2d49c276634e9ae242f6551a75649aa4fbd65135d8f4e23c20c1cba883058dd",
+   "full_sha256": "847803cb538db0e78226250891268175a70caf9e8216ed130b11837b4a4c00c3",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220959b8268b6da6c5c74731f89c82ef93bb5526749a51b71c5b759e443c921641a64736f6c634300081e"
+  },
+  "file_sha256": "522fca6c6bc25d2bde1cd8156bc4fd06eeb67201847da111616bf07eb332cbf3",
+  "methodIdentifiers_sha256": "eccdce578d2f37b0c88391a3545e27482094e54126ebee20d41edcf08a281310",
+  "runtime": {
+   "executable_sha256": "66b9787272f03f2f72d73419dfef80e69dc666206b7aeea9530de9a6a91b5c5a",
+   "full_sha256": "04f9687d9a1a456baad1d5f697570e6f064fa98080408f92604d8444affdfdc9",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220959b8268b6da6c5c74731f89c82ef93bb5526749a51b71c5b759e443c921641a64736f6c634300081e"
+  }
+ },
+ "MockGauge.sol/MockGauge.json": {
+  "abi_sha256": "ccfcfefa9a94e94c01a2b6282b30f18afc727e88de11a36bf689f54f2556d1cb",
+  "creation": {
+   "executable_sha256": "e893c9b97c5cd30abce538fe79a24df204441f6551615fc859b4b3434d9c9fa9",
+   "full_sha256": "1eb62090682ed939f39a2b1405d66230b514ba1d4e2c19d520d66677f45e8847",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212208da273c57a9a50963ae9fa41112b23bd2bf549b953e1b5957a872138a76f8ca464736f6c634300081e"
+  },
+  "file_sha256": "947cfa474d7ae2c9f0f1424d961f23abcb1e3a4f9943d1c3599f3ff2f88e06e5",
+  "methodIdentifiers_sha256": "5f89cbde3c160effba81bce2b6256040217f3b7254fabf61371b024607c39b07",
+  "runtime": {
+   "executable_sha256": "7b224332bf6a68cb57a9f751047fc2bf2ce15d6dc77a7fd1ba37477778b4e9e5",
+   "full_sha256": "3adcb79ac3f2ce2ae4a4f1ade92111be187a85628c3d40e49450899cc4484b74",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212208da273c57a9a50963ae9fa41112b23bd2bf549b953e1b5957a872138a76f8ca464736f6c634300081e"
+  }
+ },
+ "MockIncentivePlatform.sol/MockIncentivePlatform.json": {
+  "abi_sha256": "7ccc5a7dbeed4a77188f74a3a637419fe5d199c6e9d7310dae85ed1b9ca8e513",
+  "creation": {
+   "executable_sha256": "00236c067f24969ad0c9737bc3e1ab10a7480cda730b9f14c999d7a00cc9b68e",
+   "full_sha256": "f3e0406670c87ed8af0f797c8b0bbf379a468d8b8246088cf677f9f9659a5b9e",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212205e980df6a1e7c0f3e284baee74832b63fd99c7977903b41cd1778793efbe615d64736f6c634300081e"
+  },
+  "file_sha256": "90cc9df951d529c9bfec92dfa31edbb4a5953157d3525d2fb43eb7c79ff0d0f6",
+  "methodIdentifiers_sha256": "e704b897909675715ba6e492e84b56d61f395243281b58684e3e9013f9609a2b",
+  "runtime": {
+   "executable_sha256": "ebac69236314b820df2c77595a7eadd67bd379cd2021464043c70298870f323f",
+   "full_sha256": "a40042b24bcc5dc73655eb918905d9cea35ccbe3bc9a842069194235a346e0b0",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212205e980df6a1e7c0f3e284baee74832b63fd99c7977903b41cd1778793efbe615d64736f6c634300081e"
+  }
+ },
+ "MockListingController.sol/MockListingController.json": {
+  "abi_sha256": "6b71960518a9883cc0280defa9ee65de9bb797899a18329e022adfe6ff6e8391",
+  "creation": {
+   "executable_sha256": "cfe4ca6df1e797d7a549a5ea8e71532e5874db7160c4fbbb45582c2f3ef138d8",
+   "full_sha256": "ef825328508ae9bff7e3b68458178cfd63b53f215ea751a4d48665612b52d25a",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212204c44542a98b13a6dcc8d5cc5e7b3bc700c49ad4e2f0c7763babe7eccb9edf0df64736f6c634300081e"
+  },
+  "file_sha256": "6688cf357989fbe3bbc5cf4f399ddab02de6054cb5597e36ca16f53af8aca9c1",
+  "methodIdentifiers_sha256": "afe5c757194e2b9fd91a06437d1abfadd0f89662d491b72c1ed39859e5854e11",
+  "runtime": {
+   "executable_sha256": "391914881661a3f79c33ea30312a3713d9320661c3047f4951e2d142f91172cf",
+   "full_sha256": "3d23ed90143b2f9c74773b66db863dbe2f013f1abab57d551aac68241dff4cca",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212204c44542a98b13a6dcc8d5cc5e7b3bc700c49ad4e2f0c7763babe7eccb9edf0df64736f6c634300081e"
+  }
+ },
+ "MockPool.sol/MockPool.json": {
+  "abi_sha256": "b0569b12f33fde4af5f566b4f4be5731d0be65e5f7ce2142f9fb788424db80c4",
+  "creation": {
+   "executable_sha256": "114f428fa60a57928010f475446bbfd0603e81f3ae8a7d1aa71c48c8d2a602b5",
+   "full_sha256": "9fba4804bf0db6c9eb1afd21ee7ae0757f5680fba3b621d642a02270860ef529",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212204bb839c4e4ff23706c3cc24d1e4cb6081471e48396c344764856fdb2a868b7e364736f6c634300081e"
+  },
+  "file_sha256": "8279b7d32d6b08a0e2d24a71d876959a08a2b964d19e5d28e04b2115f7e33c0e",
+  "methodIdentifiers_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "runtime": {
+   "executable_sha256": "f5d75a6be517f446f1b564fd674bef8f904c30966228d4c916bd5e78494e36a3",
+   "full_sha256": "7553778272ca6cd31811e370d65693e53aa7e7dacb432c5cf4c06c25c9a009f8",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212204bb839c4e4ff23706c3cc24d1e4cb6081471e48396c344764856fdb2a868b7e364736f6c634300081e"
+  }
+ },
+ "MockVotiumV2.sol/MockVotiumV2.json": {
+  "abi_sha256": "e63ed1e8a2175f513fb7ab38e32d0f0d036e88d96029f096c2d042402283de24",
+  "creation": {
+   "executable_sha256": "c7dfa95861c132f2024db011d3cb347a0b4a271e7ccbd4a211ecf371c421883c",
+   "full_sha256": "351c18b66f17b043025a57a86e899c6aa3d43a9ce0e71bc1d5c2c26072aae033",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212205ee4267e8bef90bd4774dc03834d76b21b75208b65aab5779879a9c2469c19f464736f6c634300081e"
+  },
+  "file_sha256": "d2fa080fb5d1864dbea4602a13ed41d7aa97102eefadda8403ea7280670e02d4",
+  "methodIdentifiers_sha256": "445c431b2e3a67bfb26c17fdbb307edc00ae9bc1c4101d19e1ffe5745e1725d7",
+  "runtime": {
+   "executable_sha256": "d8778651e85bb798dbadc4e74df083f35e107f8fb9968b6c45ab7d85f4dc161a",
+   "full_sha256": "145a2c6e40e6aad73a0206c73d79a8d45b761386d9f0b71398e0ee48c9ff18b0",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212205ee4267e8bef90bd4774dc03834d76b21b75208b65aab5779879a9c2469c19f464736f6c634300081e"
+  }
+ },
+ "SafeToken.sol/SafeToken.json": {
+  "abi_sha256": "66bf974e1b8a2dd401e7aa67bda9261a875b7a5ead7e20995a4c5c060552f65e",
+  "creation": {
+   "executable_sha256": "b5221a947315a69ca06d2cfb11e9f898e1eea3c29f3b1bb7399ee4c0d5e5d69f",
+   "full_sha256": "fd1e7fab53a7b7ec5e1a46b2e80856f843039573d10ba9cc8959c15ef98bf445",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220ab968fc54741f8c6a584fa9f5d7badb5803e8a4033ab2dbd0543a38ce8130d2464736f6c634300081e"
+  },
+  "file_sha256": "fc673bce97ef6f4a8dcbe28f2751ef7872f5fc02cd21741bab36c357719f9710",
+  "methodIdentifiers_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+  "runtime": {
+   "executable_sha256": "267faea273650164ffd9fffd94f75242e663cb854ff19fc585c5f0188f9df87a",
+   "full_sha256": "9348aa39c8a6776d95c928f8537ad2355737318af2d1ad35690bf05787948e67",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220ab968fc54741f8c6a584fa9f5d7badb5803e8a4033ab2dbd0543a38ce8130d2464736f6c634300081e"
+  }
+ },
+ "TestBase.sol/TestBase.json": {
+  "abi_sha256": "ef45ae6b5c32f93185a07f836fac0a55350bd4e94f89d20fbe52fa81d8bc9b96",
+  "file_sha256": "0cecfdd40e0b9a116a1bdafd69b07a59e8f576b4d1d4bfa4d9862b3aec1daa9b",
+  "methodIdentifiers_sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+ },
+ "TestBase.sol/Vm.json": {
+  "abi_sha256": "8306d48f00459457b57b450c9755504f9158073408fa821ff4cc844d328bb41a",
+  "file_sha256": "3efd20a8aea3372ed4031cb0a424ab6737a8bf1315d21dc7f6716ecf787281a0",
+  "methodIdentifiers_sha256": "b771f8a1ac856c74c9bba25739209ebcc3d53d8ff50055c31b14aefeea4aaeac"
+ },
+ "TrustedFactory.t.sol/TrustedFactoryForkTest.json": {
+  "abi_sha256": "a0e3f72542b34c468f554a2325c2da159ded15f26eea7c5f0ca35d1c206cf04f",
+  "creation": {
+   "executable_sha256": "09d8e91845d2e4c246cdcbea35cf5062039decd688c24f1527e260d7cd5bb71d",
+   "full_sha256": "a0be3299b41056298eb0f6001ae72ccf1b381c99cc715798448d68fb971a827d",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212204a365f04a46c43613eacf9ec847973503621ff4f381023efee561a85d067fcea64736f6c634300081e"
+  },
+  "file_sha256": "0787c65c5c5c9d77c7d49b5a243b19bb344a5ee0c3769a441c9850b719e4e67c",
+  "methodIdentifiers_sha256": "f79bb1dfcbb2df468dfd3fe6817d424bfd41358cfa73d1fec49ca63b3a3a88e4",
+  "runtime": {
+   "executable_sha256": "31eef11541158306a5def150c0c2cff9e0eef0d2391d884896b2870f1d5378db",
+   "full_sha256": "9a79b66b77ddf50b08b70a70e2ba8ebcc17d507d5231c0cc296063fec9847f97",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212204a365f04a46c43613eacf9ec847973503621ff4f381023efee561a85d067fcea64736f6c634300081e"
+  }
+ },
+ "VoteMarket.t.sol/VoteMarketForkTest.json": {
+  "abi_sha256": "4b7269b36ece12ad7bc4acf542ab0029f6773e7f0c8c99d244618fb7e2d396c5",
+  "creation": {
+   "executable_sha256": "f9555952c66e8ecd175626db7ded3f3ee8aca8ed1f7aa6e2f1218ebabb3864b0",
+   "full_sha256": "e0c213987c035ab14bfe64fa3b61eac5e9f1124b90757893ab17613539239242",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220593994394a76d67a01db2d2094ce5bddafdfe5cdb46ce1731cb320ff1bf1230964736f6c634300081e"
+  },
+  "file_sha256": "a2790ffa06eac197c188c691409369117ba839b9dd8d6740618485fa9211cad5",
+  "methodIdentifiers_sha256": "1251883292c300a48b4898ecd8752397bd20f56bb78e7fa063808d27716467a3",
+  "runtime": {
+   "executable_sha256": "bf4607e9846956b095be075d6f05a85e3193196c2628b821d69dd08058398c6a",
+   "full_sha256": "7aece9e5ebf06e1f8b1e730f060c562aaa886ba328367a0945bf5a699a92339e",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a2646970667358221220593994394a76d67a01db2d2094ce5bddafdfe5cdb46ce1731cb320ff1bf1230964736f6c634300081e"
+  }
+ },
+ "VoteMarketAdapter.sol/VoteMarketAdapter.json": {
+  "abi_sha256": "e8afe7c28dc8995c7ab4c527e537fd97f1a856a88502db334c4469834a72271d",
+  "creation": {
+   "executable_sha256": "c38a023a6fbdf308f5b897ed1a5c4010d1e2bc25093988780fac4215e9b9a3fe",
+   "full_sha256": "1a63c6fe2a975bf5734dd5a84fc6b0b5925bdc34b842ed6b8e4ed4a025472f28",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212203c83ae9a511220bcda74c1e700b72806aa51b116dea7d31d723ced341b99a64764736f6c634300081e"
+  },
+  "file_sha256": "c0c64267b5a03a19d6da2b1d53ce8ccd8ba13752f51cc2c6ba15ac8b5e2c19ff",
+  "methodIdentifiers_sha256": "3d54137a3c20e00784a395297f7d725ec5c9fd075a1069049c9f1969b6c9b7f8",
+  "runtime": {
+   "executable_sha256": "9de8ca67ad3b8d568d46fba9e5c9662428ec80d9626d78503990e79fbafc1ad0",
+   "full_sha256": "4b5fbf66d655cd8809324bcf08c029216c513b10aea198639ca20a3055d6fe5b",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212203c83ae9a511220bcda74c1e700b72806aa51b116dea7d31d723ced341b99a64764736f6c634300081e"
+  }
+ },
+ "Votium.t.sol/VotiumForkTest.json": {
+  "abi_sha256": "6db0aa42ed58ca468fff864f840606bc22915223626e62703ee9c1d5ee0c8ab9",
+  "creation": {
+   "executable_sha256": "4339f67c0fb2db5c6ccdf726c166eb10f9d48e9890c5f1c628c467d460007de6",
+   "full_sha256": "fbb0b9d6683d26c3a06bbcb0db1ee5a43ff417116a263dc046b93335d589d3ff",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212207cc76587d0a1b5076e9c725f1163eb888991eee3d37d206faf5cf7cb294dabac64736f6c634300081e"
+  },
+  "file_sha256": "759da9d7a6e734987a0b1bbcf5701e6dd28ddbf89fde29f06ade747a87776510",
+  "methodIdentifiers_sha256": "1acf480c70f7307c2af22a0d9ad4c34fd9d70f10266962341bff45c3f9c33f98",
+  "runtime": {
+   "executable_sha256": "5fe517e1e6cb83f496941236eabc1261b3431a9e23fcc7bb73b402bee0452750",
+   "full_sha256": "8dc7af0fa1a0b54c7cd497b753c7b620290c162ff24c5298b5a24ee2c7ac8e5f",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212207cc76587d0a1b5076e9c725f1163eb888991eee3d37d206faf5cf7cb294dabac64736f6c634300081e"
+  }
+ },
+ "VotiumAdapter.sol/VotiumAdapter.json": {
+  "abi_sha256": "062d134450f2eeba2a0ae4561a4035cf8db2791f11c7c174e6198116637b245d",
+  "creation": {
+   "executable_sha256": "f472fd0fa98c28ca61e21027a31c45f94fb1b749c59d27abd0204e778a55c406",
+   "full_sha256": "9322797279718a84d17aa78f90eb9eaef6a779e3d6971b53a560182d814fa1ff",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212205d451fb150044d7e647fd5e46abb781c742f39645f6deda4b4cbb1ffae55e40d64736f6c634300081e"
+  },
+  "file_sha256": "f18ca0868c7036a5b4cf1f49b5940004c41d3537db45855323745c20a18ee2c1",
+  "methodIdentifiers_sha256": "700db579f5bd61a15d93b725f5146278c4f0b79fdec59ce4b4699acc37417dc1",
+  "runtime": {
+   "executable_sha256": "81307cf268a838af6d557968a8c8193cf3b81c302af97f2e5650e99d18858c08",
+   "full_sha256": "f5c86a4f944e958a62943cbebd9caf25653d388c4afa09e635b8991dd51a4961",
+   "metadata_keys": [
+    "ipfs",
+    "solc"
+   ],
+   "metadata_trailer": "a26469706673582212205d451fb150044d7e647fd5e46abb781c742f39645f6deda4b4cbb1ffae55e40d64736f6c634300081e"
+  }
+ },
+ "build-info/15d987edaf4e139e.json": {
+  "file_sha256": "baafbb40d7209437eb9e1ff3db0d0e14ff06324612bc464145dc2cc3bb4e2987"
+ },
+ "build-info/839d23ee874ad697.json": {
+  "file_sha256": "67ab878cf2937c8efeac692c7a5cc19728e8df1369717966a7a71fc28a99d50d"
+ },
+ "build-info/b28b8bf7f4d626d5.json": {
+  "file_sha256": "6706c7c4544a7936e7b1e2768302a54f51e0646198e5fbf7a01e079efcefdccd"
+ },
+ "build-info/b739814eee354c73.json": {
+  "file_sha256": "f6afe686fe2ae35f3de618546e9b72b852ef1a02aec995e95e77d49b29415148"
+ }
+}

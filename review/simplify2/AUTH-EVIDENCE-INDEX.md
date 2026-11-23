@@ -119,3 +119,101 @@ rounds must use the verbatim r3gate evidence standard: an unchanged acknowledged
 activation gate is not a confirmed simplification; a concrete new contradiction,
 missing current-law mapping, stale binding or bypass remains reportable. Final
 candidate approval and activation cannot be claimed while their cells are open.
+
+
+## r3docs final-shipped-candidate binding addendum (appended by the builder, C03/P0)
+
+Final shipped product/docs candidate: `a9de6ffc99343801575b72a2be78ea83bd73508c`
+(P2+P0; sole product-side parent commit `340db1d40882f4a3a8432e9bc0e5505023faf99d`,
+P1; both descend from authority `62c8326ff2bdac2aa4917bf2caac9aaa71bf31f9`).
+The product tree is byte-identical to the bound baseline
+`d88d633c64fde7b3f37e29d846f744747186a688` except the ten allowlisted
+comment/prose files below; receipts land in the final `r3docs:` commit under
+`review/r3docs/` per the operator leg brief. Previous candidate records above
+are preserved unchanged as history; this is the candidate-specific addendum
+required by the r3gate ledger, not another index.
+
+### Facts produced by the builder (records, not approvals)
+
+Admitted rows implemented: C03 (publication wording + this binding), C05,
+C07, C13, C15 — comments/prose only. The G5 independent confirmation pass
+and owner approval remain outside this leg's outputs.
+
+Source digests (sha256) of the ten changed files at the candidate:
+
+| path | sha256 |
+| --- | --- |
+| `README.md` | `eabb56ea1dacba33f21aa91cb4d1cf656adbd1d94c3ffe0a8e3f2fb9cab2961e` |
+| `contracts/adapters/VoteMarketAdapter.sol` | `7e7c46bc649c3ab6972fccc4bbe9b2f9f3b3dc3f04bef43e8d2fde7c65b58fdd` |
+| `contracts/adapters/VotiumAdapter.sol` | `a8fdb6b283b6aef00637836e587980606c00ab9a3736411c9fa6d88bff60bf15` |
+| `contracts/interfaces/ICampaignRemoteManager.sol` | `4d45eb62d4776b6cbe75ade6d6a7b5756a827972f60e7ef50bff52957e866c4d` |
+| `contracts/libraries/SafeToken.sol` | `99f608a32758d0e733524b490dd94b43f136c06f9c03e9decdcabe79ff905447` |
+| `docs/ABI.md` | `74c0cd83d2d65f1067cf65433a92ccb39bf8bf51c63c48c765d97f38b73ebd0f` |
+| `docs/CURVE-PROPOSAL.md` | `039e77175d037a920f0456998f37c2126a15e2c67c8d50435c469f90950d0719` |
+| `docs/OPERATIONS.md` | `1eea222e59c70a4135ce3e238ff16ab2fc5ef2804c850ff6a861b9aeb344c178` |
+| `test/fork/ForkFixture.sol` | `3e347daa2b600885701e36f6473e1c46c7703fad95fe553fe9c8b581a3b50838` |
+| `test/fork/ForkVoteMarket.t.sol` | `445614f6ee034a5965e97af212a24012a00adb6a0e42f9e2ae1799c557fa7c5b` |
+
+Bytecode equality: for the three product deployables (`CurveGaugeLister`,
+`VoteMarketAdapter`, `VotiumAdapter`) the EXECUTABLE (validated-metadata-
+stripped) creation and runtime bytecode hashes are IDENTICAL to the
+d88d633 baseline under both profiles, from fresh isolated-worktree builds
+(method and raw trailer bytes retained). Full-object hashes drift only
+inside the validated Solidity metadata trailer because metadata embeds
+source keccaks; per the work order this is disclosed and no byte-identical
+compiler metadata is claimed from a comment-only diff. Test artifacts
+embed product creation-code metadata, so their equivalence rests on the
+frozen sources: 43 non-allowlisted files byte-equal to the BINDING.json
+baseline and zero executable-token delta on all six admitted Solidity
+files. Details: `review/r3docs/BYTECODE-PROOF.md`.
+
+Gate receipts (digest-bound):
+
+| receipt | sha256 |
+| --- | --- |
+| `review/r3docs/BYTECODE-PROOF.md` | `6fe8081f10d80af9a8355d2c7132b50cb58c7817290fd902e31ceeff0c764a32` |
+| `review/r3docs/CONFIRMATION-BRIEF.md` | `5e00629702392534166a1d8cb1f964068aa8a6c3fdda5e7f3bf2a5f87a58a752` |
+| `review/r3docs/GATES.md` | `440531c01b1937d4e8a3ab42c750dfae6b1c2c317d1dab5ba6d974396e57fc5f` |
+| `review/r3docs/MANIFEST.json` | `6d3ea5ce3dee9191c7fd162d9812d85d6adca2d4e61d706015cb33689fe0f155` |
+| `review/r3docs/ROW-HUNK-MAP.md` | `15cee1a5d9028080f5725b52a277a1de3c215f9d616b18b3be4e411431473473` |
+| `review/r3docs/artifacts/census_check.py` | `a0c5d8fc38aa9fb7c3c159713ef3315341e7cd6e35e380eac2225303601e11d0` |
+| `review/r3docs/artifacts/compare-final.txt` | `cda22b5ab8f1a2bbdfaa36bac8c247761210987eaf80a579ffcc2525e19a9e16` |
+| `review/r3docs/artifacts/compare_g0_g2.py` | `13eab8f2411900870fbd96c61ae6f8f4811bc6016b593401cb9ab23cc2936463` |
+| `review/r3docs/artifacts/fork-run.log` | `ab3ac8f2bbbc05b59c4241b7e4c96e609669dca02a1374ac82274b80dd15a766` |
+| `review/r3docs/artifacts/fork_identity_check.py` | `320379c562a861ec83b6f21f205596c6d8d1d2dabdc31d6bfa50cf19b5c7341d` |
+| `review/r3docs/artifacts/hash_artifacts.py` | `219dac354f00b36fee2b2da4a36a7733881402a9d48848b4bbfa30d0833cb5fb` |
+| `review/r3docs/artifacts/hashes-base-default.json` | `c75882492cf4327f84b99474303ff02de0f57ba24a3cc9558af30bf113559d55` |
+| `review/r3docs/artifacts/hashes-base-fork.json` | `b30067c86c0b567e5d444afe5ae0e20b08813dc7b7da3f27fe30003aeeb55766` |
+| `review/r3docs/artifacts/hashes-cand-default.json` | `4f221e656a978292aa29597b8b4a523d44b1ea8469c0fd75ed4e2ca7770a2a20` |
+| `review/r3docs/artifacts/hashes-cand-fork.json` | `1bbb8402f67c75453549684d86640ea5a9139f48f2467626c2976ae2f54eafdd` |
+| `review/r3docs/artifacts/list-cand-default.txt` | `4643fab6ffe76f0159a44060a21f7f4411e445f92e121ffd045d6413a4827a1f` |
+| `review/r3docs/artifacts/list-cand-fork.txt` | `2f9cf3cc0618bb79e95e849ecb83db9c7268aad3ff1b8414968875b50c0cd601` |
+| `review/r3docs/artifacts/test-cand-default.json` | `5f7784f0a54c8f222cc04935859b99314b63c1069549fa743a6a9a1e779cf832` |
+| `review/r3docs/artifacts/test-cand-unreachable.json` | `21cff64b3d5d6bf595f30cfb9e6efa739499b33f5ee86d8f2b1704a80db8a358` |
+| `review/r3docs/artifacts/token_cmp.py` | `b36ff97226c0b269eb99aaaee79f96788d560f0f19b2179d97e5465bb4691629` |
+
+Verdicts recorded natively (exits retained in `review/r3docs/artifacts/`):
+`forge fmt --check` exit 0; both-profile fresh builds exit 0; offline
+suite 77/77 Success in BOTH the RPC-unset run and the
+`MAINNET_RPC_URL=http://127.0.0.1:1` repeat, executed == discovered ==
+BINDING census (77 default identities, no duplicates, no skips); pinned
+fork `scripts/test-fork.sh` exit 0 with fail-closed preflight at block
+26401019 hash `0x55810b079923a14fb97ad548f5024f65530dbc4fb2357a38f41e13b3d27cb6d3`
+and executed PASS set == BINDING census (13 fork identities, no skips);
+`git diff --check` exit 0. Fork cache mode: fresh same-session build in
+the isolated candidate worktree; NO new cold/warm qualification is
+claimed (historical cold/warm evidence stays historical).
+
+### Pending approval cells (OPEN — never filled from green gates)
+
+| cell | status |
+| --- | --- |
+| Owner approval of this shipped candidate, its build/evidence and the digests above | ABSENT ⇒ OPEN (owner/governance release authority owes it; a successful suite is not approval) |
+| PAO-AUTH final release/activation binding | SATISFIED-TRACKING (this addendum supplies candidate binding); final owner approval OPEN |
+| PAO-FD | SATISFIED-TRACKING; ACTIVATION-OPEN under review/simplify2/FD-BOUND-OBLIGATION.md |
+| PAO-CTL | SATISFIED-TRACKING; ACTIVATION-OPEN under review/simplify2/CTL-CALLER-ROLE-GATE.md |
+| Independent confirmation pass (work order G5) | OWED; carrier `review/r3docs/CONFIRMATION-BRIEF.md` (r3gate §3.4 paragraph verbatim) |
+| All other deployment gates (DEPLOYMENT-PINS §, registry/validator/gauge/kill-role, funded venues, ownership/bindings, float, operations) | independently OPEN |
+
+No completion marker, gate receipt or published path in this package
+authorizes deployment, broadcast or unpause.
