@@ -17,6 +17,8 @@ The validator pointer is immutable, but its owner or appointed managers can chan
 
 Not deployed. The no-bounty release plan and gates, the exact ABI/layout manifest, the exact test-identity witness inventory and the dependency and acceptance receipts are held by the project owner as a single release evidence package bound to the exact candidate commit, and are producible on demand; an authority ruling is not implementation acceptance or mainnet authorization. Consult candidate-bound execution receipts for actual passing counts, not historical totals.
 
+A bounded set of authority rulings is selectively published in-tree — `review/r3gate/` (the admission ruling, the bound census `BINDING.json`, the fork-clause resolution and that leg's verification) plus the `review/simplify2/` pre-activation obligation carriers, and this documentation package's receipts under `review/r3docs/`. These records carry admission decisions, obligation registrations and evidence boundaries; they are a partial view of, not a substitute for, the complete owner-held candidate evidence package (normative plan, ABI/layout manifest, witness inventory, dependency and acceptance receipts), which remains owner-controlled and producible on demand. A published path is not approval, and selective publication removes no owner control: the pre-activation obligations carried in those documents remain ACTIVATION-OPEN until the named approvals are actually given.
+
 The earlier V2/reporting implementation and proposal are preserved at Git commit `e18bee54c08832dd7fd6d0a11932290155bf9178`. Historical reviews describe their original candidates and are not a fresh audit of this release; the source comparison and baseline evidence belong to those records and are held with the release evidence package. Current operational limits include FeeDistributor checkpoint contention, immutable venue availability and irrecoverable VoteMarket campaign residuals; see `docs/OPERATIONS.md`.
 
 ## Layout
@@ -28,7 +30,7 @@ The earlier V2/reporting implementation and proposal are preserved at Git commit
 - `fork/` — concrete pinned mainnet-fork runners; abstract scenarios remain under `test/fork/`.
 - `docs/CURVE-PROPOSAL.md`, `docs/ABI.md`, `docs/OPERATIONS.md`, `docs/DEPLOYMENT-PINS.md` — current product and deployment reference.
 
-Release authority, exact manifests and candidate-bound evidence are not shipped in the tree; they are held by the project owner as the candidate-bound release evidence package and producible on demand.
+Release authority, exact manifests and the complete candidate-bound release evidence package are not shipped in the tree; they are held by the project owner and producible on demand. The tree selectively carries only the bounded r3gate authority rulings, the pre-activation obligation carriers and this documentation package's receipts listed under Status and evidence; their presence there is neither the full package nor an approval of it.
 
 ## Running checks
 

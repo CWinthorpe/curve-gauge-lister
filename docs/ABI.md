@@ -43,6 +43,8 @@ Views:
 - `epochsElapsed(address gauge)` -> `uint256`.
 - `releasable(address gauge)` -> `uint256`.
 
+Monetary views are gross escrow accounting, not venue-delivery or funded-execution quotes: `releasable` is the current status/flag-conditioned gross matured-unpaid projection; `remaining` is the Active unreleased liability; `totalEscrow` is the aggregate paid Active liability, not surplus and not a guarantee that a venue or the FeeDistributor can currently execute; `epochsElapsed` is capped age under the four-quarter schedule, not a count of funded quarters.
+
 Pure:
 
 - `epochStart(uint256 timestamp)` -> `uint256`.
@@ -63,6 +65,8 @@ There is no payable core entrypoint, receive or fallback. Owner setters and two-
 - `OwnershipTransferred(address indexed previousOwner,address indexed newOwner)`
 
 Successful confiscation emits `EscrowConfiscated` then `FeeCheckpointResult(true)` after exact custody and mandatory accounting succeed. `EscrowConfiscated` is the completion signal for escrow accounting (CX-MAINT, current ABI): the mandatory same-transaction accounting postchecks have already passed when it commits. `FeeCheckpointResult` carries two documented meanings under this ABI — standalone best-effort maintenance telemetry from the retained `checkpointFees()` wrapper, and retained compatibility telemetry emitted after `EscrowConfiscated` on the confiscation path — and neither is separately load-bearing accounting evidence beyond the fields it names. Its receipt week is the transfer's week floor, not a promise that all fees enter one upstream week bucket. A standalone `checkpointFees` result reports only whether that upstream call returned; the wrapper's Boolean, its failure log and the caller identity are not equivalent to a direct FeeDistributor maintenance call (which stays available under the documented ordinary-caller policy), and no local change removes upstream shared-window contention.
+
+`PlatformDeposit.amount` and `QuarterReleased.amount` are gross escrow expenditure — the amount pulled from escrow toward the platform, not a measured net venue reward: the independently observed net reward plus the current platform fee equals gross at the pinned Votium venue, and no fixed future fee, net reward or guaranteed vote count is promised; a VoteMarket deposit records funded L1 ingress, not L2 delivery.
 
 ## Errors (33, including shared token errors)
 
