@@ -7,12 +7,15 @@ import {ICurveRegistry} from "./interfaces/ICurveRegistry.sol";
 import {ICurveGauge} from "./interfaces/ICurveGauge.sol";
 import {IFeeDistributor} from "./interfaces/IFeeDistributor.sol";
 import {IIncentivePlatform} from "./interfaces/IIncentivePlatform.sol";
+import {ITrustedGaugeValidator} from "./interfaces/ITrustedGaugeValidator.sol";
 import {SafeToken} from "./libraries/SafeToken.sol";
 
 /// @title CurveGaugeLister
 /// @notice Fee-gated gauge lister with four-epoch bribe escrow and gauge-flag
-/// confiscation to the fixed crvUSD FeeDistributor. See plans/PLAN.md
-/// (Amendment A2); R1–R6 of plans/REQUIREMENTS.md are the operator authority.
+/// confiscation to the fixed crvUSD FeeDistributor. Chain-1 only; starts
+/// paused; paid admission requires the constructor-pinned trusted gauge
+/// validator to return canonical true for the exact gauge.
+/// plans/V1ALIGN-PLAN.md is the release authority for this amended source.
 contract CurveGaugeLister {
     // ---------------------------------------------------------------------
     // Types (plan §3.1)
@@ -95,6 +98,14 @@ contract CurveGaugeLister {
     address public immutable controller;
     /// @notice Immutable confiscation destination.
     address public immutable feeDistributor;
+    /// @notice Immutable pinned trusted gauge validator (plans/V1ALIGN-PLAN.md
+    /// §2.1): the ONLY top-level read for paid admission is
+    /// `validateGauge(gauge)` on this address. No setter, no default, no
+    /// per-listing override, no configuration-tuple extension. Code presence
+    /// at construction is a wiring guard, NOT proof of correct ABI, ownership,
+    /// policy or authenticity; operators must supply the verified pin
+    /// explicitly and reverify it.
+    address public immutable trustedGaugeValidator;
 
     address public owner;
     address public pendingOwner;
@@ -186,6 +197,19 @@ contract CurveGaugeLister {
     error PlatformNotReady(address platform);
     error DistributorUnusable();
     error ConfiscationDeltaMismatch();
+    /// @notice Construction outside chain 1 (plans/V1ALIGN-PLAN.md §2.1): the
+    /// first constructor check; venue semantics are mainnet-keyed.
+    error WrongChain();
+    /// @notice Trusted-factory admission (plans/V1ALIGN-PLAN.md §2.1): the
+    /// pinned validator's call SUCCEEDED with exactly 32 bytes containing
+    /// canonical zero for this gauge. Includes underlying factory/module faults
+    /// that the real validator itself collapses to false. Selector 0x6c706dca.
+    error UntrustedGauge(address gauge);
+    /// @notice Trusted-factory read fault (§2.1): the top-level call failed,
+    /// the response length is not exactly 32 bytes, or the decoded uint256
+    /// word exceeds 1. Checker error data is normalized here, never bubbled
+    /// as the specified error. Selector 0x7835e9b7.
+    error TrustedGaugeCheckFailed(address gauge);
 
     modifier lock() {
         if (_lockState != 1) revert Reentrancy();
@@ -203,25 +227,35 @@ contract CurveGaugeLister {
     // Construction (plan §3.1, §4 config validation, §7 platform validation)
     // ---------------------------------------------------------------------
 
-    /// @notice Set the DAO owner and immutable settlement dependencies; validate
-    /// all configuration before enabling paid admission.
-    /// @dev Require nonzero owner; code at token/controller/distributor/registry;
-    /// token decimals exactly 18; `feeDistributor.token() == crvUSD_`;
+    /// @notice Set the DAO owner and immutable settlement dependencies plus
+    /// the pinned trusted gauge validator (plans/V1ALIGN-PLAN.md §2.1);
+    /// validate all configuration before enabling paid admission. The core
+    /// starts paused: owner-authenticated adapter bindings, controller
+    /// authorization and deployment checks must complete before unpausing.
+    /// @dev Require chain 1 FIRST (`WrongChain`); nonzero owner; code at
+    /// token/controller/distributor/validator (`NoCode` covers zero and EOA
+    /// inputs); token decimals exactly 18; `feeDistributor.token() == crvUSD_`;
     /// distributor not killed; valid admission and platform configs per plan
-    /// sections 4 and 7. No address may be supplied by a lister. No fee transfer
-    /// or platform approval occurs in construction.
+    /// sections 4 and 7. No address may be supplied by a lister. No fee
+    /// transfer or platform approval occurs in construction. No
+    /// `validateGauge` call is made at construction: there is no candidate
+    /// gauge yet, and the validator code check is wiring validation only,
+    /// never pin authentication.
     constructor(
         address owner_,
         address crvUSD_,
         address controller_,
         address feeDistributor_,
         AdmissionConfig memory admission_,
-        PlatformConfig memory platforms_
+        PlatformConfig memory platforms_,
+        address trustedGaugeValidator_
     ) {
+        if (block.chainid != 1) revert WrongChain();
         if (owner_ == address(0)) revert ZeroOwner();
         if (crvUSD_.code.length == 0) revert NoCode(crvUSD_);
         if (controller_.code.length == 0) revert NoCode(controller_);
         if (feeDistributor_.code.length == 0) revert NoCode(feeDistributor_);
+        if (trustedGaugeValidator_.code.length == 0) revert NoCode(trustedGaugeValidator_);
         if (IERC20Minimal(crvUSD_).decimals() != 18) revert BadAdmissionConfig();
 
         if (IFeeDistributor(feeDistributor_).token() != crvUSD_) revert DistributorUnusable();
@@ -230,7 +264,9 @@ contract CurveGaugeLister {
         crvUSD = crvUSD_;
         controller = controller_;
         feeDistributor = feeDistributor_;
+        trustedGaugeValidator = trustedGaugeValidator_;
         owner = owner_;
+        paused = true;
 
         _validateAdmission(admission_);
         _validatePlatforms(platforms_, crvUSD_);
@@ -286,23 +322,56 @@ contract CurveGaugeLister {
         if (IIncentivePlatform(platform).lister() != address(this)) revert PlatformNotReady(platform);
     }
 
+    /// @dev Trusted-factory admission (plans/V1ALIGN-PLAN.md §2.1): the single
+    /// top-level read of the constructor-pinned validator for THIS candidate
+    /// gauge. Only a successful staticcall returning exactly 32 bytes
+    /// containing integer 1 accepts. Canonical zero is `UntrustedGauge`; a
+    /// failed staticcall, a response length other than exactly 32, or a word
+    /// above 1 is normalized to `TrustedGaugeCheckFailed` without bubbling
+    /// checker error data. Malformed bool cannot escape via an unintended ABI
+    /// decoder: the decode happens as uint256 AFTER the length guard. There is
+    /// no fallback acceptance, cached true, soft warning, try/catch
+    /// continuation, caller-based exception or owner bypass. This is checked
+    /// for EACH new paid admission only — never at checkpoint/confiscate and
+    /// never retroactively.
+    function _requireTrustedGauge(address gauge) private view {
+        (bool ok, bytes memory data) =
+            trustedGaugeValidator.staticcall(abi.encodeCall(ITrustedGaugeValidator.validateGauge, (gauge)));
+        if (!ok) revert TrustedGaugeCheckFailed(gauge);
+        if (data.length != 32) revert TrustedGaugeCheckFailed(gauge);
+        uint256 verdict = abi.decode(data, (uint256));
+        if (verdict == 0) revert UntrustedGauge(gauge);
+        if (verdict > 1) revert TrustedGaugeCheckFailed(gauge);
+    }
+
     // ---------------------------------------------------------------------
     // Business entry points (plan §4, §5, §6, §7)
     // ---------------------------------------------------------------------
 
-    /// @notice Admit a registry-authenticated pool/gauge, pull the exact fee, and
-    /// call `controller.add_gauge(gauge, derivedType, INITIAL_WEIGHT)`
-    /// immediately and atomically.
-    /// @dev Anyone, including owner, may use this paid path; require not paused.
-    /// Snapshot defaults. On ANY failure revert fee, registry addition, local
-    /// listing and events together. Return only after verifying controller
-    /// membership of the derived type; do not read weight or require it to be
-    /// nonzero. Do not call a bribe platform or FeeDistributor here.
+    /// @notice Admit a registry-authenticated pool/gauge, require the
+    /// constructor-pinned trusted gauge validator to accept this exact gauge,
+    /// pull the exact fee, and call
+    /// `controller.add_gauge(gauge, derivedType, INITIAL_WEIGHT)` immediately
+    /// and atomically.
+    /// @dev Anyone, including owner, may use this paid path; require not
+    /// paused. Registry/structural admission runs FIRST; the trusted-factory
+    /// read follows `_admit` and precedes platform readiness, any
+    /// StoredListing/totalEscrow write, the fee transfer and controller
+    /// addition, so trust never precedes registry authentication and never
+    /// follows a custody or listing effect. On ANY failure revert fee,
+    /// registry addition, local listing and events together. Do not read
+    /// weight or require it to be nonzero. Do not call a bribe platform or
+    /// FeeDistributor here. There is no owner exemption on this path.
     function listGauge(address pool, address gauge, uint256 gaugeIndex, uint256 handlerId) external lock {
         if (paused) revert ListingsPaused();
         AdmissionConfig memory cfg = _admissionConfig;
         PlatformConfig memory plat = _platformConfig;
         (address lpToken, int128 derivedType) = _admit(pool, gauge, gaugeIndex, handlerId, cfg);
+
+        // V1ALIGN §2.1 ordering: exactly here, after `_admit` returns and
+        // before readiness, listing write, `totalEscrow` accounting, fee
+        // transfer or `controller.add_gauge`.
+        _requireTrustedGauge(gauge);
 
         // auditfix001 §2: paid admission refuses unbound or misbound
         // adapters BEFORE any StoredListing/totalEscrow write, fee pull or

@@ -3,15 +3,16 @@ pragma solidity 0.8.30;
 
 /// @title ITrustedGaugeValidator
 /// @notice Call-site-local ABI declaration for the single top-level predicate
-/// of the constructor-pinned trusted gauge validator
-/// (plans/TRUSTEDFACTORY-PLAN.md §2/§3.2). The product never imports,
+/// of the constructor-pinned trusted gauge validator read by the amended V1
+/// `CurveGaugeLister` (plans/V1ALIGN-PLAN.md §2.1). The product never imports,
 /// vendors or deploys the external validator registry/module source: this
-/// file declares ONLY the one function V2 reads, so the admission helper can
-/// encode the exact selector (`validateGauge(address)` = 0xe92cd3d3).
+/// file declares ONLY the one function paid admission reads, so the admission
+/// helper can encode the exact selector (`validateGauge(address)` =
+/// 0xe92cd3d3).
 /// @dev The proposal predicate `validateProposalGauges(uint256)`
 /// (0x2da285c4), the policy read `policyForFactory(address)` (0x967d5935)
 /// and `proposalModule()` (0xf8dc587d) are deliberately NOT declared here:
-/// they are not admission authority (plan §2).
+/// they are not admission authority (plan §2.1).
 interface ITrustedGaugeValidator {
     /// @notice Canonical true only when the candidate gauge authenticates
     /// against the policy configured for the factory the gauge itself names

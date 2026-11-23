@@ -20,7 +20,7 @@ import {
     FactoryClaimGauge,
     LegacyLpToken,
     PoisonAddController
-} from "./mocks/TrustedFactoryMocks.sol";
+} from "../mocks/TrustedFactoryMocks.sol";
 
 /// @title TrustedFactoryTest
 /// @notice The eight default-lane trust witnesses

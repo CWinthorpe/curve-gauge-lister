@@ -11,6 +11,7 @@ import {MockCurveRegistry} from "../contracts/mocks/MockCurveRegistry.sol";
 import {MockListingController} from "../contracts/mocks/MockListingController.sol";
 import {MockFeeDistributor} from "../contracts/mocks/MockFeeDistributor.sol";
 import {MockIncentivePlatform} from "../contracts/mocks/MockIncentivePlatform.sol";
+import {AlwaysTrueTrustedValidator} from "./mocks/TrustedFactoryMocks.sol";
 
 /// @dev Test-only faulty deployment (plan §9): add_gauge does nothing so the
 /// product's membership postcondition must reject a lying integration instead
@@ -135,19 +136,30 @@ contract CurveGaugeListerTest is TestBase {
         votium = new MockIncentivePlatform(address(token));
         voteMarket = new MockIncentivePlatform(address(token));
 
+        // Explicit chain 1 before ordinary deployment: the amended
+        // constructor checks WrongChain FIRST (V1ALIGN §2.1).
+        vm.chainId(1);
         lister = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(controller),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(votium), address(voteMarket), 5000)
+            CurveGaugeLister.PlatformConfig(address(votium), address(voteMarket), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
 
         vm.prank(controllerDao);
         controller.setLister(address(lister));
         votium.setLister(address(lister));
         voteMarket.setLister(address(lister));
+
+        // V1ALIGN §1.3: the fresh core starts paused. Observe that shipped
+        // state, then the owner unpauses after binding so every retained
+        // downstream obligation runs on its original path.
+        assertTrue(lister.paused(), "core starts paused");
+        vm.prank(daoOwner);
+        lister.setPaused(false);
 
         token.mint(payer, FEE * 16);
         vm.startPrank(payer);
@@ -275,18 +287,23 @@ contract CurveGaugeListerTest is TestBase {
         MockIncentivePlatform bVotium = new MockIncentivePlatform(address(token));
         MockIncentivePlatform bVoteMarket = new MockIncentivePlatform(address(token));
         WeightReaderRevertingController badReader = new WeightReaderRevertingController(controllerDao, int128(2));
+        vm.chainId(1);
         CurveGaugeLister noWeightLister = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(badReader),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(bVotium), address(bVoteMarket), 5000)
+            CurveGaugeLister.PlatformConfig(address(bVotium), address(bVoteMarket), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         badReader.setLister(address(noWeightLister));
         bVotium.setLister(address(noWeightLister));
         bVoteMarket.setLister(address(noWeightLister));
+        // Owner unpause after binding (V1ALIGN §1.3 fixture wiring).
+        vm.prank(daoOwner);
+        noWeightLister.setPaused(false);
         (address poolB, address gaugeB,) = deployAuthenticatedPool(5, 0);
         vm.startPrank(payer);
         token.approve(address(noWeightLister), FEE);
@@ -308,18 +325,23 @@ contract CurveGaugeListerTest is TestBase {
         MockIncentivePlatform cVotium = new MockIncentivePlatform(address(token));
         MockIncentivePlatform cVoteMarket = new MockIncentivePlatform(address(token));
         NoOpListingController noOp = new NoOpListingController(controllerDao, int128(2));
+        vm.chainId(1);
         CurveGaugeLister noOpLister = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(noOp),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(cVotium), address(cVoteMarket), 5000)
+            CurveGaugeLister.PlatformConfig(address(cVotium), address(cVoteMarket), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         noOp.setLister(address(noOpLister));
         cVotium.setLister(address(noOpLister));
         cVoteMarket.setLister(address(noOpLister));
+        // Owner unpause after binding (V1ALIGN §1.3 fixture wiring).
+        vm.prank(daoOwner);
+        noOpLister.setPaused(false);
         (address poolC, address gaugeC,) = deployAuthenticatedPool(6, 0);
         uint256 payerBeforeC = token.balanceOf(payer);
         vm.startPrank(payer);
@@ -340,18 +362,23 @@ contract CurveGaugeListerTest is TestBase {
         MockIncentivePlatform dVotium = new MockIncentivePlatform(address(token));
         MockIncentivePlatform dVoteMarket = new MockIncentivePlatform(address(token));
         WrongTypeListingController wrongType = new WrongTypeListingController(controllerDao, int128(2));
+        vm.chainId(1);
         CurveGaugeLister wrongTypeLister = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(wrongType),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(dVotium), address(dVoteMarket), 5000)
+            CurveGaugeLister.PlatformConfig(address(dVotium), address(dVoteMarket), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         wrongType.setLister(address(wrongTypeLister));
         dVotium.setLister(address(wrongTypeLister));
         dVoteMarket.setLister(address(wrongTypeLister));
+        // Owner unpause after binding (V1ALIGN §1.3 fixture wiring).
+        vm.prank(daoOwner);
+        wrongTypeLister.setPaused(false);
         (address poolD, address gaugeD,) = deployAuthenticatedPool(7, 0);
         uint256 payerBeforeD = token.balanceOf(payer);
         vm.startPrank(payer);
@@ -957,6 +984,9 @@ contract CurveGaugeListerTest is TestBase {
 
     function test_ConstructorRejectsAliasedEndpoints() public {
         CurveGaugeLister.AdmissionConfig memory adm = CurveGaugeLister.AdmissionConfig(address(registry), 8);
+        // Created BEFORE the armed reverts: the validator CREATE would
+        // otherwise consume the next-call expectation.
+        address okValidator = address(new AlwaysTrueTrustedValidator());
 
         vm.expectRevert(abi.encodeWithSelector(CurveGaugeLister.BadPlatformConfig.selector));
         new CurveGaugeLister(
@@ -965,7 +995,12 @@ contract CurveGaugeListerTest is TestBase {
             address(controller),
             address(fd),
             adm,
-            CurveGaugeLister.PlatformConfig(address(votium), address(votium), 5000)
+            CurveGaugeLister.PlatformConfig(address(votium), address(votium), 5000),
+            // Healthy code-bearing validator (created before the armed
+            // reverts): the NoCode(validator) guard runs before platform
+            // validation, so these probes must supply code to keep
+            // discriminating BadPlatformConfig.
+            okValidator
         );
         vm.expectRevert(abi.encodeWithSelector(CurveGaugeLister.BadPlatformConfig.selector));
         new CurveGaugeLister(
@@ -974,7 +1009,8 @@ contract CurveGaugeListerTest is TestBase {
             address(controller),
             address(fd),
             adm,
-            CurveGaugeLister.PlatformConfig(address(voteMarket), address(voteMarket), 1)
+            CurveGaugeLister.PlatformConfig(address(voteMarket), address(voteMarket), 1),
+            okValidator
         );
         vm.expectRevert(abi.encodeWithSelector(CurveGaugeLister.BadPlatformConfig.selector));
         new CurveGaugeLister(
@@ -983,7 +1019,8 @@ contract CurveGaugeListerTest is TestBase {
             address(controller),
             address(fd),
             adm,
-            CurveGaugeLister.PlatformConfig(address(votium), address(votium), 9999)
+            CurveGaugeLister.PlatformConfig(address(votium), address(votium), 9999),
+            okValidator
         );
 
         // Single-share constructions keep working, zero address allowed unused.
@@ -993,7 +1030,8 @@ contract CurveGaugeListerTest is TestBase {
             address(controller),
             address(fd),
             adm,
-            CurveGaugeLister.PlatformConfig(address(0), address(voteMarket), 0)
+            CurveGaugeLister.PlatformConfig(address(0), address(voteMarket), 0),
+            okValidator
         );
         assertEq(soloVm.owner(), daoOwner, "0-bps single-share constructor ok");
         CurveGaugeLister soloVotium = new CurveGaugeLister(
@@ -1002,7 +1040,8 @@ contract CurveGaugeListerTest is TestBase {
             address(controller),
             address(fd),
             adm,
-            CurveGaugeLister.PlatformConfig(address(votium), address(0), 10000)
+            CurveGaugeLister.PlatformConfig(address(votium), address(0), 10000),
+            okValidator
         );
         assertEq(soloVotium.owner(), daoOwner, "10000-bps single-share constructor ok");
     }

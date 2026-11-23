@@ -16,6 +16,7 @@ import {MockListingController} from "../contracts/mocks/MockListingController.so
 import {MockFeeDistributor} from "../contracts/mocks/MockFeeDistributor.sol";
 import {MockVotiumV2} from "../contracts/mocks/MockVotiumV2.sol";
 import {MockCampaignRemoteManager} from "../contracts/mocks/MockCampaignRemoteManager.sol";
+import {AlwaysTrueTrustedValidator} from "./mocks/TrustedFactoryMocks.sol";
 
 /// @dev Minimal extra cheatcodes this suite needs; same cheatcode dispatcher,
 /// no forge-std dependency (TestBase Vm stays untouched for other suites).
@@ -142,7 +143,8 @@ contract AdaptersTest is TestBase {
             address(controller),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(votiumAdapter), address(vmAdapter), 5000)
+            CurveGaugeLister.PlatformConfig(address(votiumAdapter), address(vmAdapter), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
 
         vm.prank(controllerDao);
@@ -155,6 +157,13 @@ contract AdaptersTest is TestBase {
         vmAdapter.setLister(address(lister));
         assertEq(votiumAdapter.lister(), address(lister), "votium adapter bound in setUp");
         assertEq(vmAdapter.lister(), address(lister), "votemarket adapter bound in setUp");
+
+        // V1ALIGN §1.3: the fresh core starts paused. Observe that shipped
+        // state, then the owner unpauses after binding so every retained
+        // downstream obligation runs on its original path.
+        assertTrue(lister.paused(), "core starts paused");
+        vm.prank(daoOwner);
+        lister.setPaused(false);
 
         // Ops ETH float for the cross-chain campaign messages.
         vmx.deal(address(vmAdapter), 1 ether);
@@ -1297,16 +1306,25 @@ contract AdaptersTest is TestBase {
     /// Construction legitimately works before binding (auditfix001 §2).
     function _h01Core(VotiumAdapter va_, VoteMarketAdapter vma_, uint16 bps) internal returns (H01Core memory k) {
         k.controller = new MockListingController(controllerDao, int128(2));
+        // Explicit chain 1 before ordinary deployment (V1ALIGN §2.1): some
+        // callers run after the deliberate wrong-chain venue phase flipped it.
+        vm.chainId(1);
         k.lister = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(k.controller),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(va_), address(vma_), bps)
+            CurveGaugeLister.PlatformConfig(address(va_), address(vma_), bps),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         k.controller.setLister(address(k.lister));
+        // Owner unpause after binding (V1ALIGN §1.3): readiness remains an
+        // independent backstop — the retained PlatformNotReady/expectations
+        // below are what gate the paid call, exactly as originally asserted.
+        vm.prank(daoOwner);
+        k.lister.setPaused(false);
         vm.startPrank(payer);
         token.approve(address(k.lister), type(uint256).max);
         vm.stopPrank();

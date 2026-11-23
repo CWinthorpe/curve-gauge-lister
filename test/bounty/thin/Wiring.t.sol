@@ -6,6 +6,7 @@ import {Vm} from "../../TestBase.sol";
 import {GaugeBounty} from "../../../contracts/GaugeBounty.sol";
 import {CurveGaugeListerV2} from "../../../contracts/CurveGaugeListerV2.sol";
 import {CurveGaugeLister} from "../../../contracts/CurveGaugeLister.sol";
+import {AlwaysTrueTrustedValidator} from "../../mocks/TrustedFactoryMocks.sol";
 import {IGaugeBounty} from "../../../contracts/interfaces/IGaugeBounty.sol";
 import {FeeDistributorAccounting} from "../../../contracts/libraries/FeeDistributorAccounting.sol";
 import {ReportView, BountyConfig, StakeState} from "../../../contracts/bounty/BountyTypes.sol";
@@ -619,12 +620,17 @@ contract ThinWiringTest is BountyFixture {
             address(v1Ctl),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(v1Votium), address(v1Market), 5000)
+            CurveGaugeLister.PlatformConfig(address(v1Votium), address(v1Market), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         v1Ctl.setLister(address(v1));
         v1Votium.setLister(address(v1));
         v1Market.setLister(address(v1));
+        // Owner unpause after binding (V1ALIGN §1.3) so the retained
+        // V1-only-listing cell keeps exercising the paid path.
+        vm.prank(daoOwner);
+        v1.setPaused(false);
         crvUSD.mint(payer, FEE);
         approveCrvUsd(payer, address(v1), FEE);
         vm.prank(payer);

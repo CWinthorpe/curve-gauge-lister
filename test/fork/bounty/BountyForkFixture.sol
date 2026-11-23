@@ -83,15 +83,6 @@ abstract contract BountyForkFixture is ForkFixture {
     address internal constant POOL_SECOND = 0x123B0134930BD5cF8f26b3E3c621acbc791A294b;
     address internal constant GAUGE_SECOND = 0x9D81d64A0e17d02EA8FD962FA13F4B89146d9a43;
 
-    /// @dev V2 trusted-gauge validator pin (plans/TRUSTEDFACTORY-PLAN.md
-    /// §4.1/review/trustedfactory): GaugeValidator runtime at BOTH probed
-    /// blocks is 3,402 bytes with Keccak-256
-    /// 0x2d684822a3f2bf6f99f902474289219041443a9d9cc94cbc28505050185016cd,
-    /// including metadata. Re-asserted read-only below BEFORE construction.
-    address internal constant TRUSTED_VALIDATOR = 0x888888c34a46d0b2A34e9204e5273208E670e784;
-    uint256 internal constant TRUSTED_VALIDATOR_SIZE = 3402;
-    bytes32 internal constant H_TRUSTED_VALIDATOR = 0x2d684822a3f2bf6f99f902474289219041443a9d9cc94cbc28505050185016cd;
-
     uint256 internal constant STAKE = 1000e18;
 
     uint256 internal constant COOLDOWN = 43200;
@@ -171,17 +162,6 @@ abstract contract BountyForkFixture is ForkFixture {
         } catch (bytes memory ret) {
             assertEq(uint256(ret.length), 0, "fork2: absence is an empty revert");
         }
-    }
-
-    /// @dev Read-only identity check of the constructor-pinned validator at
-    /// the CURRENT fork block before any V2 construction (plan §6 fork-fixture
-    /// row): the live runtime must equal the recorded 3,402-byte GaugeValidator
-    /// including metadata. A mismatch is a suite failure, never a skip or a
-    /// substitute dependency.
-    function _assertValidatorPinAtFork() internal view {
-        bytes memory vcode = TRUSTED_VALIDATOR.code;
-        assertEq(uint256(vcode.length), TRUSTED_VALIDATOR_SIZE, "fork: validator runtime size 3402");
-        assertEq(keccak256(vcode), H_TRUSTED_VALIDATOR, "fork: validator runtime keccak");
     }
 
     /// @dev Deploy bounty + a fresh V2 core wired to the REAL venues/adapters

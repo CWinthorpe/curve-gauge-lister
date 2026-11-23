@@ -24,7 +24,7 @@ import {
     MockCallsScript
 } from "./mocks/MockBountyGovernance.sol";
 import {MockBountyHook} from "./mocks/MockBountyHook.sol";
-import {AlwaysTrueTrustedValidator} from "../v2/mocks/TrustedFactoryMocks.sol";
+import {AlwaysTrueTrustedValidator} from "../mocks/TrustedFactoryMocks.sol";
 import {GaugeBounty} from "../../contracts/GaugeBounty.sol";
 import {SilentRecipient} from "./mocks/BountyFaultActors.sol";
 

@@ -12,6 +12,7 @@ import {MockCurveRegistry} from "../contracts/mocks/MockCurveRegistry.sol";
 import {MockListingController} from "../contracts/mocks/MockListingController.sol";
 import {MockFeeDistributor} from "../contracts/mocks/MockFeeDistributor.sol";
 import {MockIncentivePlatform} from "../contracts/mocks/MockIncentivePlatform.sol";
+import {AlwaysTrueTrustedValidator} from "./mocks/TrustedFactoryMocks.sol";
 
 /// @notice Test-only MockIncentivePlatform subclass used as the CONTRACT OWNER
 /// of a dedicated lister for the review1 finding-4 reentrancy fixture: it adds
@@ -139,19 +140,30 @@ contract SettlementTest is TestBase {
         votium = new MockIncentivePlatform(address(token));
         voteMarket = new MockIncentivePlatform(address(token));
 
+        // Explicit chain 1 before ordinary deployment: the amended
+        // constructor checks WrongChain FIRST (V1ALIGN §2.1).
+        vm.chainId(1);
         lister = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(controller),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(votium), address(voteMarket), 5000)
+            CurveGaugeLister.PlatformConfig(address(votium), address(voteMarket), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
 
         vm.prank(controllerDao);
         controller.setLister(address(lister));
         votium.setLister(address(lister));
         voteMarket.setLister(address(lister));
+
+        // V1ALIGN §1.3: the fresh core starts paused. Observe that shipped
+        // state, then the owner unpauses after binding so every retained
+        // downstream obligation runs on its original path.
+        assertTrue(lister.paused(), "core starts paused");
+        vm.prank(daoOwner);
+        lister.setPaused(false);
 
         token.mint(payer, 40 * FEE);
         vm.startPrank(payer);
@@ -530,18 +542,23 @@ contract SettlementTest is TestBase {
         fdLive_ = new MockFeeDistributor(address(token), fdAdmin, T0);
         pv_ = new MockIncentivePlatform(address(token));
         pm_ = new MockIncentivePlatform(address(token));
+        vm.chainId(1);
         lb_ = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(ctlB_),
             address(fdLive_),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(pv_), address(pm_), 5000)
+            CurveGaugeLister.PlatformConfig(address(pv_), address(pm_), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         ctlB_.setLister(address(lb_));
         pv_.setLister(address(lb_));
         pm_.setLister(address(lb_));
+        // Owner unpause after binding (V1ALIGN §1.3 fixture wiring).
+        vm.prank(daoOwner);
+        lb_.setPaused(false);
         vm.startPrank(payer);
         token.approve(address(lb_), type(uint256).max);
         vm.stopPrank();
@@ -1501,18 +1518,25 @@ contract SettlementTest is TestBase {
         fdB = new MockFeeDistributor(address(tokenB), fdAdmin, T0);
         marketB = new MockIncentivePlatform(address(tokenB));
         ownerAdapter = new ContractOwnerAdapter(address(tokenB));
+        vm.chainId(1);
         listerB = new CurveGaugeLister(
             address(ownerAdapter),
             address(tokenB),
             address(controllerB),
             address(fdB),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(ownerAdapter), address(marketB), 5000)
+            CurveGaugeLister.PlatformConfig(address(ownerAdapter), address(marketB), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         controllerB.setLister(address(listerB));
         ownerAdapter.setLister(address(listerB));
         marketB.setLister(address(listerB));
+        // Owner unpause after binding (V1ALIGN §1.3): the owner here IS the
+        // contract adapter; the retained callback-path assertions below stay
+        // intact.
+        vm.prank(address(ownerAdapter));
+        listerB.setPaused(false);
         tokenB.mint(payer, 10 * FEE);
         vm.startPrank(payer);
         tokenB.approve(address(listerB), type(uint256).max);
@@ -2026,18 +2050,23 @@ contract SettlementTest is TestBase {
         hV_ = new MockIncentivePlatform(address(token));
         hM_ = new MockIncentivePlatform(address(token));
         hC_ = new MockListingController(controllerDao, int128(2));
+        vm.chainId(1);
         hL_ = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(hC_),
             address(hFd_),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(hV_), address(hM_), 5000)
+            CurveGaugeLister.PlatformConfig(address(hV_), address(hM_), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         hC_.setLister(address(hL_));
         hV_.setLister(address(hL_));
         hM_.setLister(address(hL_));
+        // Owner unpause after binding (V1ALIGN §1.3 fixture wiring).
+        vm.prank(daoOwner);
+        hL_.setPaused(false);
         vm.startPrank(payer);
         token.approve(address(hL_), FEE);
         vm.stopPrank();
@@ -2203,18 +2232,23 @@ contract SettlementTest is TestBase {
         fdM_ = new MockFeeDistributor(address(token), fdAdmin, T0);
         pvM_ = new MockIncentivePlatform(address(token));
         pmM_ = new MockIncentivePlatform(address(token));
+        vm.chainId(1);
         listerM_ = new CurveGaugeLister(
             daoOwner,
             address(token),
             address(ctlM_),
             address(fdM_),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(pvM_), address(pmM_), 5000)
+            CurveGaugeLister.PlatformConfig(address(pvM_), address(pmM_), 5000),
+            address(new AlwaysTrueTrustedValidator())
         );
         vm.prank(controllerDao);
         ctlM_.setLister(address(listerM_));
         pvM_.setLister(address(listerM_));
         pmM_.setLister(address(listerM_));
+        // Owner unpause after binding (V1ALIGN §1.3 fixture wiring).
+        vm.prank(daoOwner);
+        listerM_.setPaused(false);
         vm.startPrank(payer);
         token.approve(address(listerM_), type(uint256).max);
         vm.stopPrank();

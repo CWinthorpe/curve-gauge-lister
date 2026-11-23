@@ -251,6 +251,18 @@ abstract contract ForkFixture is TestBase {
     address internal constant CRVUSD_HOLDER = 0x0655977FEb2f289A4aB78af67BAB0d17aAb84367;
     uint256 internal constant HOLDER_PINNED_BALANCE = 16440647424276528096928814;
 
+    /// @dev V1ALIGN trusted-gauge validator pin (plans/V1ALIGN-PLAN.md §2.1;
+    /// plans/V1ALIGN-WITNESSES.md §2): GaugeValidator runtime at the frozen
+    /// pin (block 26401019) is 3,402 bytes with Keccak-256
+    /// 0x2d684822a3f2bf6f99f902474289219041443a9d9cc94cbc28505050185016cd,
+    /// including metadata. Re-asserted read-only before every core
+    /// construction; a mismatch is a suite failure, never a skip or a
+    /// substitute dependency. (Moved out of the retired bounty fork fixture;
+    /// it now belongs to the no-bounty V1 kit independently of bounty deps.)
+    address internal constant TRUSTED_VALIDATOR = 0x888888c34a46d0b2A34e9204e5273208E670e784;
+    uint256 internal constant TRUSTED_VALIDATOR_SIZE = 3402;
+    bytes32 internal constant H_TRUSTED_VALIDATOR = 0x2d684822a3f2bf6f99f902474289219041443a9d9cc94cbc28505050185016cd;
+
     address internal constant FACTORY = 0x6A8cbed756804B16E05E741eDaBd5cB544AE21bf;
     address internal constant AMM_PROXY = 0xeDA0108D5bB8cdE2ba4A59E22F3Ed5d211C77187;
     address internal constant EMERGENCY_DAO = 0x467947EE34aF926cF1DCac093870f613C96B1E0c;
@@ -581,24 +593,40 @@ abstract contract ForkFixture is TestBase {
         assertTrue(rando() != payer() && rando() != DAO && rando() != EMERGENCY_DAO, "outsider distinct");
     }
 
+    /// @dev Read-only identity check of the constructor-pinned validator at
+    /// the CURRENT fork block before any core construction: the live runtime
+    /// must equal the recorded 3,402-byte GaugeValidator including metadata.
+    /// A mismatch is a suite failure, never a skip or a substitute
+    /// dependency.
+    function _assertValidatorPinAtFork() internal view {
+        bytes memory vcode = TRUSTED_VALIDATOR.code;
+        assertEq(uint256(vcode.length), TRUSTED_VALIDATOR_SIZE, "fork: validator runtime size 3402");
+        assertEq(keccak256(vcode), H_TRUSTED_VALIDATOR, "fork: validator runtime keccak");
+    }
+
     /// @dev Deploy the real product trio and bind BOTH adapters to this
     /// lister through their owner-gated one-time `setLister` (auditfix001
     /// §1/§7), under a narrowly scoped DAO prank — DAO is the real adapter
     /// owner in these fixtures. Getter readback proves both bindings before
     /// any seating, funding or listing write. §4/R8-4: read-only primary
     /// provenance + code/kill-authority checks run BEFORE any seating,
-    /// funding or listing write this fixture can make.
+    /// funding or listing write this fixture can make. V1ALIGN: the live
+    /// validator pin identity is re-verified read-only before construction,
+    /// the core is wired to the ACTUAL pinned validator, and the owner
+    /// unpauses only after the bindings read back.
     function _deployTrio(uint16 votiumBps) internal returns (Trio memory t) {
         _assertPrimaryProvenance();
         t.va = new VotiumAdapter(CRVUSD, DAO, VOTIUM);
         t.vma = new VoteMarketAdapter(CRVUSD, DAO, CRM, VM_DESTINATION);
+        _assertValidatorPinAtFork();
         t.lister = new CurveGaugeLister(
             DAO,
             CRVUSD,
             CONTROLLER,
             FEEDIST,
             CurveGaugeLister.AdmissionConfig(METAREGISTRY, 8),
-            CurveGaugeLister.PlatformConfig(address(t.va), address(t.vma), votiumBps)
+            CurveGaugeLister.PlatformConfig(address(t.va), address(t.vma), votiumBps),
+            TRUSTED_VALIDATOR
         );
         fvm.startPrank(DAO);
         t.va.setLister(address(t.lister));
@@ -606,6 +634,10 @@ abstract contract ForkFixture is TestBase {
         fvm.stopPrank();
         assertEq(t.va.lister(), address(t.lister), "votium adapter bound to this core");
         assertEq(t.vma.lister(), address(t.lister), "votemarket adapter bound to this core");
+        // V1ALIGN §1.3: paused-at-construction; the owner unpauses after
+        // the verified bindings.
+        fvm.prank(DAO);
+        t.lister.setPaused(false);
     }
 
     /// @dev Trio with a VoteMarket adapter bound to an alternate (proven
@@ -617,13 +649,15 @@ abstract contract ForkFixture is TestBase {
         _assertPrimaryProvenance();
         t.va = new VotiumAdapter(CRVUSD, DAO, VOTIUM);
         t.vma = new VoteMarketAdapter(CRVUSD, DAO, CRM, altDest);
+        _assertValidatorPinAtFork();
         t.lister = new CurveGaugeLister(
             DAO,
             CRVUSD,
             CONTROLLER,
             FEEDIST,
             CurveGaugeLister.AdmissionConfig(METAREGISTRY, 8),
-            CurveGaugeLister.PlatformConfig(address(t.va), address(t.vma), votiumBps)
+            CurveGaugeLister.PlatformConfig(address(t.va), address(t.vma), votiumBps),
+            TRUSTED_VALIDATOR
         );
         fvm.startPrank(DAO);
         t.va.setLister(address(t.lister));
@@ -631,6 +665,10 @@ abstract contract ForkFixture is TestBase {
         fvm.stopPrank();
         assertEq(t.va.lister(), address(t.lister), "votium adapter bound to this core");
         assertEq(t.vma.lister(), address(t.lister), "votemarket adapter bound to this core");
+        // V1ALIGN §1.3: paused-at-construction; the owner unpauses after
+        // the verified bindings.
+        fvm.prank(DAO);
+        t.lister.setPaused(false);
     }
 
     /// @dev §5.2 fork-only seating: real controller two-step admin transfer

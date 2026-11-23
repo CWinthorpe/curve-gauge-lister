@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {MockListingController} from "../../../contracts/mocks/MockListingController.sol";
+import {MockListingController} from "../../contracts/mocks/MockListingController.sol";
 
 /// @dev Call shape the validator/module fixtures read off a candidate gauge:
 /// the registry-authenticated gauge's own LP association and its self-asserted

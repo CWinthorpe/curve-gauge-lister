@@ -3,6 +3,7 @@ pragma solidity 0.8.30;
 
 import {TestBase, Vm} from "../TestBase.sol";
 import {CurveGaugeLister} from "../../contracts/CurveGaugeLister.sol";
+import {AlwaysTrueTrustedValidator} from "../mocks/TrustedFactoryMocks.sol";
 import {IERC20Minimal} from "../../contracts/interfaces/IERC20Minimal.sol";
 import {IIncentivePlatform} from "../../contracts/interfaces/IIncentivePlatform.sol";
 import {SafeToken} from "../../contracts/libraries/SafeToken.sol";
@@ -126,7 +127,8 @@ contract AdapterConfigR2Test is TestBase {
             address(controller),
             address(fd),
             CurveGaugeLister.AdmissionConfig(address(registry), 8),
-            CurveGaugeLister.PlatformConfig(address(votiumAdapter), address(vmAdapter), VOTIUM_BPS)
+            CurveGaugeLister.PlatformConfig(address(votiumAdapter), address(vmAdapter), VOTIUM_BPS),
+            address(new AlwaysTrueTrustedValidator())
         );
 
         vm.prank(controllerDao);
@@ -135,6 +137,13 @@ contract AdapterConfigR2Test is TestBase {
         votiumAdapter.setLister(address(lister));
         vm.prank(adapterManager);
         vmAdapter.setLister(address(lister));
+
+        // V1ALIGN §1.3: the fresh core starts paused. Observe that shipped
+        // state, then the owner unpauses after binding so the retained
+        // funded-checkpoint paths run as originally specified.
+        assertTrue(lister.paused(), "core starts paused");
+        vm.prank(daoOwner);
+        lister.setPaused(false);
 
         // Ops ETH float for the cross-chain campaign messages.
         vmx.deal(address(vmAdapter), 1 ether);
