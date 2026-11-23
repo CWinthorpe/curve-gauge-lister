@@ -5,6 +5,7 @@ import {IIncentivePlatform} from "../interfaces/IIncentivePlatform.sol";
 import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
 import {ICampaignRemoteManager} from "../interfaces/ICampaignRemoteManager.sol";
 import {SafeToken} from "../libraries/SafeToken.sol";
+import {AdapterOwnable} from "../libraries/AdapterOwnable.sol";
 import {CurveWeek} from "../libraries/CurveWeek.sol";
 
 /// @title VoteMarketAdapter
@@ -31,7 +32,7 @@ import {CurveWeek} from "../libraries/CurveWeek.sol";
 /// recorded-call proof, not a live-campaign proof. The CampaignRemoteManager
 /// and votemarket endpoints are constructor-bound so no owner action can
 /// redirect token approvals or bridge destinations.
-contract VoteMarketAdapter is IIncentivePlatform {
+contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
     /// @notice VoteMarket v2 campaigns live on Arbitrum one (INTEL §3.3).
     uint256 public constant DESTINATION_CHAIN_ID = 42161;
     /// @notice Fixed campaign length in periods (matches the YB helper; the
@@ -48,10 +49,10 @@ contract VoteMarketAdapter is IIncentivePlatform {
     /// @notice Destination-chain VoteMarket passed through to the manager
     /// (`0x8c2c5a29...14d9`, Arbitrum side, per verified live reads).
     address public immutable votemarket;
-    /// @notice Manager allowed to tune per-deposit configuration.
-    address public owner;
-    /// @notice Two-step ownership candidate; no renounce path exists.
-    address public pendingOwner;
+    // `owner`/`pendingOwner`, their getters, the ownership events, NotOwner,
+    // onlyOwner and the two-step transitions are inherited from
+    // AdapterOwnable (S22) unchanged in call surface, error encodings,
+    // storage order, events and slots.
 
     /// @notice Per-vote reward cap in campaign params
     /// (default type(uint256).max, the YB-helper live-read value).
@@ -89,10 +90,7 @@ contract VoteMarketAdapter is IIncentivePlatform {
         uint256 amount,
         bytes32 receipt
     );
-    event OwnershipTransferStarted(address indexed owner, address indexed pendingOwner);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    error NotOwner();
     error NotLister();
     error ListerAlreadySet();
     error BadLister();
@@ -105,11 +103,6 @@ contract VoteMarketAdapter is IIncentivePlatform {
     error PlatformUnderpull();
     error InsufficientEth();
     error BadReceipt();
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
-        _;
-    }
 
     /// @notice Bind token, manager, L1 CampaignRemoteManager and destination
     /// VoteMarket. The token and the local CampaignRemoteManager are immutable
@@ -173,9 +166,9 @@ contract VoteMarketAdapter is IIncentivePlatform {
         SafeToken.safeTransferFrom(crvUSD, msg.sender, address(this), amount);
         if (IERC20Minimal(crvUSD).balanceOf(address(this)) != balBefore + amount) revert PullDeltaMismatch();
 
-        // Native gas budget for the L1→L2 campaign message: base creation gas
-        // plus the per-excluded-address allowance (YB helper pricing).
-        uint256 additionalGasLimit = campaignCreationGas + blacklistedAddressGas * _excluded.length;
+        // Native gas budget for the L1→L2 campaign message: the one shared
+        // priced-message calculation (S15).
+        uint256 additionalGasLimit = _messageGasLimit();
         uint256 value = additionalGasLimit * gasPrice;
         if (address(this).balance < value) revert InsufficientEth();
 
@@ -212,6 +205,11 @@ contract VoteMarketAdapter is IIncentivePlatform {
 
         // Nonce-keyed so repeated top-ups of one gauge never alias, while a
         // duplicate (gauge, scheduledEpoch) is rejected before any pull.
+        // This concrete duplicate-key rejection is the S21 reason the core
+        // forbids a mixed split onto one shared endpoint — one quarter would
+        // route two same-key calls here. It is VoteMarket-specific ingress
+        // semantics, NOT a universal adapter rule: Votium's live-round witness
+        // separately accepts multiple same-gauge entries in one round.
         uint256 index = _depositLog.length;
         receipt = keccak256(abi.encode(gauge, scheduledEpoch, amount, index + 1));
         if (receipt == bytes32(0)) revert BadReceipt();
@@ -233,17 +231,34 @@ contract VoteMarketAdapter is IIncentivePlatform {
         emit CampaignDeposit(gauge, scheduledEpoch, executionEpoch, amount, receipt);
     }
 
-    /// @notice Keeper helper: native ETH still missing for ONE deposit of
-    /// `amount` (0 once bound-lister traffic is possible). The required value
-    /// prices the cross-chain message only and is independent of `amount`, so
-    /// a zero-amount query (which the deposit itself rejects) reports no
-    /// deficit; fund `ethDeficit(x)` to the adapter via plain `send`/`call`
+    /// @notice Keeper helper: native ETH still missing for ONE campaign
+    /// message under the CURRENT settings. `ethDeficit(0)` is a deliberate
+    /// no-message query returning 0 (the deposit itself rejects a zero
+    /// amount); for any positive amount the return is the configured
+    /// ONE-message shortfall only (S24) — not funding readiness, not a
+    /// backlog quote, and not a quote conditioned on the core's binding:
+    /// a catch-up settlement may need several messages, and external
+    /// ingress/delivery eligibility is assessed separately
+    /// (docs/OPERATIONS.md). The value prices the cross-chain message via the
+    /// same calculation `deposit` executes (S15) and is independent of
+    /// `amount`; fund `ethDeficit(x)` to the adapter via plain `send`/`call`
     /// before the next scheduled settlement.
     function ethDeficit(uint256 amount) external view returns (uint256) {
         if (amount == 0) return 0;
-        uint256 required = (campaignCreationGas + blacklistedAddressGas * _excluded.length) * gasPrice;
+        uint256 required = _messageGasLimit() * gasPrice;
         uint256 held = address(this).balance;
         return required > held ? required - held : 0;
+    }
+
+    /// @dev One priced-message calculation (S15): the bridge-gas limit of a
+    /// single campaign message — base creation gas plus the per-exclusion
+    /// allowance times the configured list length (YB helper pricing). Shared
+    /// verbatim by `deposit` and the positive-amount `ethDeficit` shortfall so
+    /// quote and execution cannot diverge. The `setGasSettings` worst-case
+    /// checks (all future lengths 0..MAX_EXCLUDED, before any multiplication)
+    /// keep this pair overflow-free across the full accepted triple domain.
+    function _messageGasLimit() private view returns (uint256) {
+        return campaignCreationGas + blacklistedAddressGas * _excluded.length;
     }
 
     /// @notice Inspect the recorded funding of one (gauge, scheduledEpoch).
@@ -288,14 +303,20 @@ contract VoteMarketAdapter is IIncentivePlatform {
     /// remains empty.
     function setExcluded(address[] calldata excluded_) external onlyOwner {
         if (excluded_.length > MAX_EXCLUDED) revert BadExclusion();
-        delete _excluded;
+        // Validate-then-replace (S18): the whole calldata is checked against
+        // its own earlier entries (nonzero, pairwise distinct, length bound,
+        // caller's order preserved) BEFORE storage is touched, so a rejected
+        // list never depends on the revert to undo intermediate writes.
         for (uint256 i = 0; i < excluded_.length; ++i) {
             address e = excluded_[i];
             if (e == address(0)) revert BadExclusion();
             for (uint256 j = 0; j < i; ++j) {
-                if (_excluded[j] == e) revert BadExclusion();
+                if (excluded_[j] == e) revert BadExclusion();
             }
-            _excluded.push(e);
+        }
+        delete _excluded;
+        for (uint256 i = 0; i < excluded_.length; ++i) {
+            _excluded.push(excluded_[i]);
         }
         emit ExcludedSet(excluded_);
     }
@@ -329,20 +350,5 @@ contract VoteMarketAdapter is IIncentivePlatform {
         gasPrice = gasPrice_;
         emit GasSettingsSet(campaignCreationGas_, blacklistedAddressGas_, gasPrice_);
     }
-
-    /// @notice Manager proposes a nonzero new owner; acceptance is required.
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "zero owner");
-        pendingOwner = newOwner;
-        emit OwnershipTransferStarted(owner, newOwner);
-    }
-
-    /// @notice Only pendingOwner may accept; no renounce path exists.
-    function acceptOwnership() external {
-        require(msg.sender == pendingOwner, "not pending owner");
-        address previous = owner;
-        owner = msg.sender;
-        pendingOwner = address(0);
-        emit OwnershipTransferred(previous, msg.sender);
-    }
+    // transferOwnership/acceptOwnership inherited from AdapterOwnable (S22).
 }

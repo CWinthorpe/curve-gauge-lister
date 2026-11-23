@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-/// @notice Stateless, verified MetaRegistry ABI subset; always use explicit indices.
+/// @notice Stateless, verified MetaRegistry ABI subset; always use explicit
+/// indices. Fork-side venue mirror: test/fork/ForkFixture.sol
+/// `IMetaRegistryVenue` (S26) — the six reads here must agree with its
+/// product-subset members; its extra handler-listing read is observation-only.
 interface ICurveRegistry {
     /// @notice Authenticate pool through a trusted registry handler; a revert fails admission.
     function is_registered(address pool, uint256 handlerId) external view returns (bool);

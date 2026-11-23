@@ -5,8 +5,11 @@ pragma solidity 0.8.30;
 /// @notice Minimal local declaration of the VoteMarket v2 (Stake DAO) L1
 /// CampaignRemoteManager (`0x53ad4cd1f1e52dd02aa9fc4a8250a1b74f351ca2`,
 /// Sourcify exact match, see docs/INTEL-YB-HELPERS.md). Field names, order and
-/// types — including the `uint8` numberOfPeriods — are pinned to the verified
-/// deployed ABI. Not a full CampaignRemoteManager interface.
+/// types — including the `uint8 numberOfPeriods` — are pinned to the verified
+/// deployed ABI. Not a full CampaignRemoteManager interface. Fork-side venue
+/// mirror: test/fork/ForkFixture.sol `ICrmmVenue` (S26) — the campaign struct
+/// field names/order/types and the `createCampaign` selector must agree with
+/// its declarations; whitelist/immutables reads there are observation-only.
 interface ICampaignRemoteManager {
     /// @notice Campaign creation payload forwarded to the destination-chain
     /// VoteMarket via the LaPoste messenger. Delivery is asynchronous: an L1

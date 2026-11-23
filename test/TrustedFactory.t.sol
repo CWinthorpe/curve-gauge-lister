@@ -445,7 +445,7 @@ contract TrustedFactoryTest is TrustedFactoryFixture {
         // (d) TF_BEFORE_READINESS: trust precedes paid-adapter readiness.
         // A false checker against an UNBOUND positive-share endpoint must
         // still yield exactly UntrustedGauge — never PlatformNotReady —
-        // proving the trust read runs before `_requirePlatformsReady`.
+        // proving the trust read runs before `_requireAdaptersBound`.
         _tf4ReadinessPrecedence();
     }
 

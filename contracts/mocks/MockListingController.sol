@@ -71,9 +71,12 @@ contract MockListingController is IListingController {
     }
 
     /// @notice Return the REAL controller's latest scheduled raw bias, exactly
-    /// as `points_weight[gauge][time_weight[gauge]].bias`. Virtual so a
-    /// test-local deployment can fault ONLY this read while add/membership stay
-    /// functional (exec7: proving paid admission needs no weight read).
+    /// as `points_weight[gauge][time_weight[gauge]].bias`. Observation/test-only
+    /// surface (S20): the product's declared controller dependency is
+    /// add/type/count only; witnesses keep this read through the concrete mock
+    /// (and, on fork, the real venue) types. Virtual so a test-local deployment
+    /// can fault ONLY this read while add/membership stay functional (exec7:
+    /// proving paid admission needs no weight read).
     function get_gauge_weight(address gauge) external view virtual returns (uint256) {
         _checkRead();
         GaugeState storage st = _gauges[gauge];

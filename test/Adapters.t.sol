@@ -8,6 +8,7 @@ import {IIncentivePlatform} from "../contracts/interfaces/IIncentivePlatform.sol
 import {SafeToken} from "../contracts/libraries/SafeToken.sol";
 import {VotiumAdapter} from "../contracts/adapters/VotiumAdapter.sol";
 import {VoteMarketAdapter} from "../contracts/adapters/VoteMarketAdapter.sol";
+import {AdapterOwnable} from "../contracts/libraries/AdapterOwnable.sol";
 import {MockERC20} from "../contracts/mocks/MockERC20.sol";
 import {MockPool} from "../contracts/mocks/MockPool.sol";
 import {MockGauge} from "../contracts/mocks/MockGauge.sol";
@@ -297,7 +298,7 @@ contract AdaptersTest is TestBase {
         VotiumAdapter fresh = new VotiumAdapter(address(token), adapterManager, address(votiumMock));
         vm.recordLogs();
         vm.prank(stranger);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         fresh.setLister(address(token));
         Vm.Log[] memory bindLogs = vm.getRecordedLogs();
         assertFalse(
@@ -364,12 +365,12 @@ contract AdaptersTest is TestBase {
         VotiumKit memory kit = freshVotiumKit(address(votiumMock));
 
         vm.prank(stranger);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         kit.adapter_.setMaxPerVote(777);
         address[] memory one = new address[](1);
         one[0] = actor("voterX");
         vm.prank(stranger);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         kit.adapter_.setExcluded(one);
 
         address[] memory badZero = new address[](1);
@@ -691,7 +692,7 @@ contract AdaptersTest is TestBase {
         ListerCaller caller = kit.caller;
 
         vm.prank(stranger);
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         adapterX.setGasSettings(1, 1, 1);
         vm.prank(adapterManager);
         vm.expectRevert(VoteMarketAdapter.BadGasSettings.selector);
@@ -700,7 +701,7 @@ contract AdaptersTest is TestBase {
         vm.expectRevert(VoteMarketAdapter.BadGasSettings.selector);
         adapterX.setGasSettings(CREATION_GAS, BLACKLIST_GAS, 0);
         vm.prank(stranger);
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         adapterX.setMaxRewardPerVote(123);
         address[] memory badZero = new address[](1);
         badZero[0] = address(0);
@@ -1020,7 +1021,7 @@ contract AdaptersTest is TestBase {
         vmx.deal(address(fresh), 1 ether);
         vm.recordLogs();
         vm.prank(stranger);
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         fresh.setLister(address(crmMock));
         Vm.Log[] memory bindLogs = vm.getRecordedLogs();
         assertFalse(
@@ -1073,7 +1074,7 @@ contract AdaptersTest is TestBase {
     function test_Adapter_OwnershipTransferTwoStep() public {
         VotiumKit memory kit = freshVotiumKit(address(votiumMock));
         vm.prank(stranger);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         kit.adapter_.transferOwnership(stranger);
         vm.prank(adapterManager);
         vm.expectRevert();
@@ -1088,10 +1089,10 @@ contract AdaptersTest is TestBase {
         // (nor can any other non-owner).
         VotiumAdapter freshVotium = new VotiumAdapter(address(token), adapterManager, address(votiumMock));
         vm.prank(newMgr);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         freshVotium.setLister(address(kit.caller));
         vm.prank(stranger);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         freshVotium.setLister(address(kit.caller));
 
         // Before acceptance the OLD owner still cannot rebind a successful
@@ -1113,11 +1114,11 @@ contract AdaptersTest is TestBase {
         vm.expectRevert(VotiumAdapter.ListerAlreadySet.selector);
         kit.adapter_.setLister(actor("secondLister"));
         vm.prank(adapterManager);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         kit.adapter_.setLister(actor("secondLister"));
 
         vm.prank(adapterManager);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         kit.adapter_.setMaxPerVote(1);
         vm.prank(newMgr);
         kit.adapter_.setMaxPerVote(1);
@@ -1131,7 +1132,7 @@ contract AdaptersTest is TestBase {
         vm.prank(newMgr);
         freshVotium.acceptOwnership();
         vm.prank(adapterManager);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         freshVotium.setLister(address(kit.caller));
         vm.expectEmit(true, false, false, true);
         emit ListerSet(address(kit.caller));
@@ -1144,12 +1145,12 @@ contract AdaptersTest is TestBase {
         vm.prank(adapterManager);
         va.transferOwnership(newMgr);
         vm.prank(newMgr);
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         va.setLister(address(kit.caller));
         vm.prank(newMgr);
         va.acceptOwnership();
         vm.prank(adapterManager);
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         va.setLister(address(kit.caller));
         vm.prank(newMgr);
         va.setLister(address(kit.caller));
@@ -1157,13 +1158,13 @@ contract AdaptersTest is TestBase {
         // Neither owner can rebind: old owner is no longer owner, new owner
         // hits the one-time-binding refusal.
         vm.prank(adapterManager);
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         va.setLister(actor("secondLister"));
         vm.prank(newMgr);
         vm.expectRevert(VoteMarketAdapter.ListerAlreadySet.selector);
         va.setLister(actor("secondLister"));
         vm.prank(adapterManager);
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         va.setGasSettings(1, 1, 1);
         vm.prank(newMgr);
         va.setGasSettings(2, 2, 2);
@@ -1483,7 +1484,7 @@ contract AdaptersTest is TestBase {
         vm.expectRevert(VotiumAdapter.ListerAlreadySet.selector);
         vaStaged.setLister(address(k4.lister));
         vm.prank(daoOwner);
-        vm.expectRevert(VotiumAdapter.NotOwner.selector); // the core owner is not the adapter owner
+        vm.expectRevert(AdapterOwnable.NotOwner.selector); // the core owner is not the adapter owner
         vaStaged.setLister(address(k4.lister));
         VotiumAdapter vaFresh = new VotiumAdapter(address(token), adapterManager, address(votiumMock));
         VoteMarketAdapter vmFresh = new VoteMarketAdapter(address(token), adapterManager, address(crmMock), VM_L2);
@@ -1528,7 +1529,7 @@ contract AdaptersTest is TestBase {
         // getter stays zero and no ListerSet is emitted.
         vm.recordLogs();
         vm.prank(address(attacker));
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         victim.setLister(address(attacker));
         Vm.Log[] memory logs = vm.getRecordedLogs();
         assertFalse(hasEventFrom(logs, address(victim), keccak256("ListerSet(address)")), "no ListerSet on capture");

@@ -9,6 +9,7 @@ import {IIncentivePlatform} from "../../contracts/interfaces/IIncentivePlatform.
 import {SafeToken} from "../../contracts/libraries/SafeToken.sol";
 import {VotiumAdapter} from "../../contracts/adapters/VotiumAdapter.sol";
 import {VoteMarketAdapter} from "../../contracts/adapters/VoteMarketAdapter.sol";
+import {AdapterOwnable} from "../../contracts/libraries/AdapterOwnable.sol";
 import {MockERC20} from "../../contracts/mocks/MockERC20.sol";
 import {MockPool} from "../../contracts/mocks/MockPool.sol";
 import {MockGauge} from "../../contracts/mocks/MockGauge.sol";
@@ -392,7 +393,7 @@ contract AdapterConfigR2Test is TestBase {
         // Unauthorized otherwise-valid request: still NotOwner, no mutation.
         GasSnap memory pre = _gasSnap();
         vm.prank(stranger);
-        vm.expectRevert(VoteMarketAdapter.NotOwner.selector);
+        vm.expectRevert(AdapterOwnable.NotOwner.selector);
         vmAdapter.setGasSettings(1, 1, 1);
         GasSnap memory post = _gasSnap();
         assertEq(post.b, pre.b, "base untouched by NotOwner");

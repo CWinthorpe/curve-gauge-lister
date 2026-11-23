@@ -140,6 +140,9 @@ contract MockVotiumV2 is IVotiumV2 {
             // GROSS funding custody: the real venue would split this pull into
             // a platform-fee transfer plus a net-reward transfer (see
             // contract @dev); the recorded amount here is the gross debit.
+            // Multiple same-gauge entries in one round are the venue's own
+            // accepted batch shape (the recorded witness expects them); they
+            // do NOT license the product aliasing its two venue roles.
             SafeToken.safeTransferFrom(_token, msg.sender, address(this), amount);
             _totals[_round][_gauges[i]][_token] += amount;
             uint256 index = _incentives.length;

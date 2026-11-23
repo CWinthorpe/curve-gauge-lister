@@ -5,6 +5,7 @@ import {IIncentivePlatform} from "../interfaces/IIncentivePlatform.sol";
 import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
 import {IVotiumV2} from "../interfaces/IVotiumV2.sol";
 import {SafeToken} from "../libraries/SafeToken.sol";
+import {AdapterOwnable} from "../libraries/AdapterOwnable.sol";
 
 /// @title VotiumAdapter
 /// @notice Real-platform adapter funding Votium v2 from the CurveGaugeLister
@@ -32,15 +33,15 @@ import {SafeToken} from "../libraries/SafeToken.sol";
 /// redirect token approvals; there is no token withdrawal path, so the
 /// adapter verifies within every deposit that the full pulled amount actually
 /// left custody.
-contract VotiumAdapter is IIncentivePlatform {
+contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
     /// @notice Immutable fee/reward token; the only token this adapter moves.
     address public immutable crvUSD;
     /// @notice Votium v2 deposit ingress (`0x63942E31...2D1e` on mainnet).
     address public immutable votium;
-    /// @notice Manager allowed to tune per-deposit configuration.
-    address public owner;
-    /// @notice Two-step ownership candidate; no renounce path exists.
-    address public pendingOwner;
+    // `owner`/`pendingOwner`, their getters, the ownership events, NotOwner,
+    // onlyOwner and the two-step transitions are inherited from
+    // AdapterOwnable (S22) unchanged in call surface, error encodings,
+    // storage order, events and slots.
 
     /// @notice Per-vote reward cap passed through to Votium (0 = unbounded).
     uint256 public maxPerVote;
@@ -64,10 +65,7 @@ contract VotiumAdapter is IIncentivePlatform {
     event VotiumDeposit(
         address indexed gauge, uint256 indexed scheduledEpoch, uint256 indexed round, uint256 amount, bytes32 receipt
     );
-    event OwnershipTransferStarted(address indexed owner, address indexed pendingOwner);
-    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
-    error NotOwner();
     error NotLister();
     error ListerAlreadySet();
     error BadLister();
@@ -78,11 +76,6 @@ contract VotiumAdapter is IIncentivePlatform {
     error PullDeltaMismatch();
     error PlatformUnderpull();
     error BadReceipt();
-
-    modifier onlyOwner() {
-        if (msg.sender != owner) revert NotOwner();
-        _;
-    }
 
     /// @notice Bind token, manager and the Votium deposit ingress. The token
     /// and the local ingress are immutable and must have deployed code; the
@@ -132,7 +125,12 @@ contract VotiumAdapter is IIncentivePlatform {
 
         // Round is the platform's live active round at call time; a late
         // scheduledEpoch buys participation in THIS round, never retroactive
-        // votes for the original escrow maturity.
+        // votes for the original escrow maturity. The venue accepting
+        // multiple same-gauge entries in one round (live-round witness) is
+        // Votium's own batch behaviour; it is NOT permission for the product
+        // to alias its two venue roles onto one endpoint (the core's
+        // distinct-positive-endpoint rule stays; see S21 in CurveGaugeLister
+        // `_validatePlatforms`).
         uint256 round = IVotiumV2(votium).activeRound();
 
         uint256 balBefore = IERC20Minimal(crvUSD).balanceOf(address(this));
@@ -204,20 +202,5 @@ contract VotiumAdapter is IIncentivePlatform {
         }
         emit ExcludedSet(excluded_);
     }
-
-    /// @notice Manager proposes a nonzero new owner; acceptance is required.
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "zero owner");
-        pendingOwner = newOwner;
-        emit OwnershipTransferStarted(owner, newOwner);
-    }
-
-    /// @notice Only pendingOwner may accept; no renounce path exists.
-    function acceptOwnership() external {
-        require(msg.sender == pendingOwner, "not pending owner");
-        address previous = owner;
-        owner = msg.sender;
-        pendingOwner = address(0);
-        emit OwnershipTransferred(previous, msg.sender);
-    }
+    // transferOwnership/acceptOwnership inherited from AdapterOwnable (S22).
 }

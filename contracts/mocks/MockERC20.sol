@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
+import {IERC20Fixture} from "../interfaces/IERC20Minimal.sol";
 
 /// @title MockERC20
 /// @notice Test-only fee/LP/coin fixture with injectable transfer behaviors.
 /// No real token economics, ownership, symbol or totalSupply is needed by this
-/// suite.
-contract MockERC20 is IERC20Minimal {
+/// suite. Implements the fixture/test extended ERC20 surface; the production
+/// typed surface (`IERC20Minimal`) carries only the reads product code uses.
+contract MockERC20 is IERC20Fixture {
     uint8 private immutable _decimals;
     mapping(address => uint256) private _balances;
     mapping(address => mapping(address => uint256)) private _allowances;

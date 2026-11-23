@@ -2,7 +2,7 @@
 pragma solidity 0.8.30;
 
 import {IFeeDistributor} from "../interfaces/IFeeDistributor.sol";
-import {IERC20Minimal} from "../interfaces/IERC20Minimal.sol";
+import {IERC20Minimal, IERC20Fixture} from "../interfaces/IERC20Minimal.sol";
 
 /// @title MockFeeDistributor
 /// @notice Test-only crvUSD fee destination with REAL balance-delta accounting
@@ -151,7 +151,7 @@ contract MockFeeDistributor is IFeeDistributor {
         if (_killed) revert IsKilled();
         uint256 amount = IERC20Minimal(_token).balanceOf(msg.sender);
         if (amount != 0) {
-            IERC20Minimal(_token).transferFrom(msg.sender, address(this), amount);
+            IERC20Fixture(_token).transferFrom(msg.sender, address(this), amount);
             if (_canCheckpoint && (block.timestamp > _lastTokenTime + TOKEN_CHECKPOINT_DEADLINE)) {
                 _doCheckpointToken();
             }

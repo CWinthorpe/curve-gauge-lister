@@ -35,7 +35,15 @@ interface FVm {
     function chainId(uint256 newChainId) external;
 }
 
-/// @dev crvUSD (standard ERC20) probe surface.
+/// @dev crvUSD (standard ERC20) probe surface. Cross-reference (S26):
+/// `decimals`/`balanceOf` must agree with the product typed reads declared in
+/// `contracts/interfaces/IERC20Minimal.sol`; `approve`/`transfer` mirror the
+/// FIXTURE-only `IERC20Fixture` movement shape used for funding (production
+/// movement is SafeToken low-level calls, so name/shape agreement with the
+/// real token still matters here). `allowance` and `name`/`symbol` are
+/// observation-only probes. Agreement here is a declaration cross-reference,
+/// not a mechanical equivalence proof — the fork expectations below stay
+/// independently checked.
 interface IErc20Venue {
     function decimals() external view returns (uint8);
     function name() external view returns (string memory);
@@ -47,6 +55,16 @@ interface IErc20Venue {
 }
 
 /// @dev Real mainnet GaugeController surface (Vyper public getters).
+/// Cross-reference (S26): `add_gauge(address,int128,uint256)`,
+/// `gauge_types(address)` and `n_gauge_types()` are the product-declared
+/// dependency subset — these MUST agree with
+/// `contracts/interfaces/IListingController.sol`. `get_gauge_weight` is the
+/// real controller's weight SURFACE, kept for observation/reference reads
+/// only (S20); `admin`, `future_admin`, `n_gauges`, `gauges()`,
+/// `commit_transfer_ownership`, `apply_transfer_ownership` and
+/// `change_gauge_weight` are observation or fixture-authority roles, never
+/// product call sites. A comment is not a mechanical equivalence proof —
+/// the paid-addition witnesses below re-verify against the live venue.
 interface IControllerVenue {
     function admin() external view returns (address);
     function future_admin() external view returns (address);
@@ -62,6 +80,11 @@ interface IControllerVenue {
 }
 
 /// @dev Real MetaRegistry surface used by admission provenance.
+/// Cross-reference (S26): the six reads here (is_registered, get_lp_token,
+/// get_gauge, get_gauge_type, get_n_coins, get_coins) MUST agree with the
+/// product-declared subset in `contracts/interfaces/ICurveRegistry.sol`.
+/// `get_registry_handlers_from_pool` is observation-only (provenance
+/// evidence, never an admission input).
 interface IMetaRegistryVenue {
     function is_registered(address, uint256) external view returns (bool);
     function get_lp_token(address, uint256) external view returns (address);
@@ -111,6 +134,15 @@ struct VenueIncentive {
     address[] excluded;
 }
 
+/// @dev Real Votium v2 venue surface. Cross-reference (S26): `activeRound()`
+/// and `maxExclusions()` must agree with the product-declared subset in
+/// `contracts/interfaces/IVotiumV2.sol`, and `depositUnevenSplitGauges`
+/// reproduces the exact product call shape from that file. Everything else
+/// (`requireAllowlist`, `tokenAllowed`, `platformFee`, `DENOMINATOR`,
+/// `feeAddress`, `incentivesLength`, `inRoundGauges`, `gaugesLength`,
+/// `roundGauges`, `virtualBalance`, `viewIncentive`) is observation-only
+/// venue-state evidence independently asserted below — not product call
+/// surface.
 interface IVotiumVenue {
     function activeRound() external view returns (uint256);
     function requireAllowlist() external view returns (bool);
@@ -136,6 +168,14 @@ interface IVotiumVenue {
 }
 
 /// @dev Real CampaignRemoteManager surface (guards + immutables + events).
+/// Cross-reference (S26): `CampaignParams` is the fork mirror of the
+/// product-declared `ICampaignRemoteManager.CampaignCreationParams` — field
+/// names, order and types (including `uint8 numberOfPeriods`) MUST agree,
+/// and the campaign witnesses below observe the forwarded payload live;
+/// `createCampaign`'s signature must agree with the product declaration.
+/// `whitelistedPlatforms`, `LA_POSTE` and `TOKEN_FACTORY` are observation-
+/// only venue-role reads. This annotation is a cross-reference; the fork's
+/// independently checked expectations remain the actual evidence.
 interface ICrmmVenue {
     error InvalidChainId();
     error PlatformNotWhitelisted();

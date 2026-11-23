@@ -302,13 +302,20 @@ contract CurveGaugeLister {
 
     function _validatePlatforms(PlatformConfig memory cfg, address token) private view {
         if (cfg.votiumBps > BPS) revert BadPlatformConfig();
-        // review1 finding 9: a mixed split onto one shared endpoint is unusable
-        // (that adapter rejects the second same-gauge/same-epoch deposit, so a
-        // frozen listing under it could never release). When both shares are
-        // positive the endpoints must differ. 0/10000 single-share configs keep
-        // the zero address allowed for the never-called side. Call predicates
-        // come from the one computed split (S11): an interior basis-point leg
-        // is positive exactly when its share amount is nonzero.
+        // review1 finding 9 (rationale per S21): under a mixed split the two
+        // legs of one quarter arrive at the shared address as two same-key
+        // (gauge, scheduledEpoch) calls; the concrete rejecting case is
+        // VoteMarket's duplicate-key guard (its witness rejects the second
+        // key before funding), so a frozen mixed listing under one shared
+        // endpoint could never fully release. The rule forbids aliasing the
+        // two PRODUCT venue roles onto one endpoint; it is not a universal
+        // adapter rule — Votium's live-round witness separately expects
+        // multiple same-gauge entries in one round, which is not permission
+        // to merge the venue roles. When both shares are positive the
+        // endpoints must differ. 0/10000 single-share configs keep the zero
+        // address allowed for the never-called side. Call predicates come
+        // from the one computed split (S11): an interior basis-point leg is
+        // positive exactly when its share amount is nonzero.
         (uint256 votiumAmount, uint256 voteMarketAmount) = _quarterSplit(cfg.votiumBps);
         if (votiumAmount > 0 && voteMarketAmount > 0 && cfg.votium == cfg.voteMarket) {
             revert BadPlatformConfig();
@@ -326,24 +333,28 @@ contract CurveGaugeLister {
         if (IIncentivePlatform(platform).rewardToken() != token) revert BadPlatformConfig();
     }
 
-    /// @dev auditfix001 §2: refuse paid admission against unbound or
-    /// incorrectly bound adapters. Every positive-share endpoint of the exact
-    /// memory configuration about to be snapshotted into the listing must
-    /// already be irrevocably bound to THIS lister. A zero-share endpoint is
-    /// never read or called. Constructor/`setPlatformConfig` validation stays
-    /// code/token/split-only: construction works before binding and staging
-    /// unbound future endpoints remains permitted; readiness is enforced on
-    /// every paid admission, including after configuration changes.
-    function _requirePlatformsReady(PlatformConfig memory cfg) private view {
+    /// @dev auditfix001 §2 (binding, named as binding per S06): refuse paid
+    /// admission against unbound or incorrectly bound adapters. Every
+    /// positive-share endpoint of the exact memory configuration about to be
+    /// snapshotted into the listing must already be irrevocably BOUND to THIS
+    /// lister (the adapter's write-once `setLister` result — see the venue
+    /// guarantee lifetime matrix in docs/OPERATIONS.md). A zero-share endpoint
+    /// is never read or called. Constructor/`setPlatformConfig` validation
+    /// stays code/token/split-only: construction works before binding and
+    /// staging unbound future endpoints remains permitted; the binding check
+    /// is enforced on every paid admission, including after configuration
+    /// changes. Public guards and diagnostics are unchanged.
+    function _requireAdaptersBound(PlatformConfig memory cfg) private view {
         (uint256 votiumAmount, uint256 voteMarketAmount) = _quarterSplit(cfg.votiumBps);
-        if (votiumAmount > 0) _requirePlatformReady(cfg.votium);
-        if (voteMarketAmount > 0) _requirePlatformReady(cfg.voteMarket);
+        if (votiumAmount > 0) _requireAdapterBound(cfg.votium);
+        if (voteMarketAmount > 0) _requireAdapterBound(cfg.voteMarket);
     }
 
     /// @dev A decoded different bound lister — including zero — reverts
-    /// PlatformNotReady. A missing, reverting or malformed `lister()` getter
-    /// propagates as a hard failure; it is never caught to continue.
-    function _requirePlatformReady(address platform) private view {
+    /// PlatformNotReady (binding diagnostic; name retained). A missing,
+    /// reverting or malformed `lister()` getter propagates as a hard failure;
+    /// it is never caught to continue.
+    function _requireAdapterBound(address platform) private view {
         if (IIncentivePlatform(platform).lister() != address(this)) revert PlatformNotReady(platform);
     }
 
@@ -402,8 +413,8 @@ contract CurveGaugeLister {
         // adapters BEFORE any StoredListing/totalEscrow write, fee pull or
         // controller addition, on the same memory configuration snapshotted
         // into the listing below. `listGaugeNoEscrow` stays independent of
-        // platform readiness.
-        _requirePlatformsReady(plat);
+        // adapter binding.
+        _requireAdaptersBound(plat);
 
         StoredListing storage rec = _listings[gauge];
         rec.pool = pool;

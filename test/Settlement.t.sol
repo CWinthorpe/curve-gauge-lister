@@ -3,7 +3,7 @@ pragma solidity 0.8.30;
 
 import {TestBase, Vm} from "./TestBase.sol";
 import {CurveGaugeLister} from "../contracts/CurveGaugeLister.sol";
-import {IERC20Minimal} from "../contracts/interfaces/IERC20Minimal.sol";
+import {IERC20Minimal, IERC20Fixture} from "../contracts/interfaces/IERC20Minimal.sol";
 import {ICurveGauge} from "../contracts/interfaces/ICurveGauge.sol";
 import {MockERC20} from "../contracts/mocks/MockERC20.sol";
 import {MockPool} from "../contracts/mocks/MockPool.sol";
@@ -31,9 +31,10 @@ contract ContractOwnerAdapter is MockIncentivePlatform {
         lastCallOk = ok;
     }
 
-    /// @notice Let this contract, as a token holder, set its own approval.
+    /// @notice Let this contract, as a token holder, set its own approval
+    /// (fixture-only movement through the extended fixture declaration).
     function approveToken(address token_, address spender, uint256 amount) external {
-        IERC20Minimal(token_).approve(spender, amount);
+        IERC20Fixture(token_).approve(spender, amount);
     }
 }
 

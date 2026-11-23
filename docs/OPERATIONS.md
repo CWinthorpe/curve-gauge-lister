@@ -14,6 +14,21 @@ Assign a deployment operator, lister config-owner responder, adapter manager, se
 
 Construction/setPlatformConfig deliberately allow staging unbound future adapters. Every paid listing checks readiness on its exact snapshotted positive-share configuration before escrow effects. Zero-share destinations are never called. The DAO-free lane does not require validator or adapter readiness and continues while paused; registry/structural/controller checks still apply.
 
+## Venue guarantee lifetimes
+
+One matrix for what each venue guarantee actually covers. Binding a core
+listing to adapter endpoints is not a venue-funding, venue-compatibility or
+destination-delivery assertion; failure modes stay disclosed in the sections
+below.
+
+| Guarantee | Set by | Frozen when | Mutable afterwards |
+| --- | --- | --- | --- |
+| Prospective admission/platform defaults (registry, maxCoins, future votium/voteMarket endpoints, split) | owner `setAdmissionConfig`/`setPlatformConfig` | only for the NEXT listing | always; prospective only, never redirects existing records |
+| Frozen listing endpoints and split | snapshotted at paid admission | at that admission | never for that record |
+| Adapter lister binding (write-once `setLister`) | each adapter's real owner | at first successful bind | never; no rebind/recovery path |
+| Live venue terms at those endpoints (Votium `maxPerVote`/exclusions, VoteMarket gas settings/reward cap/exclusions) | adapter manager setters | never | always; pending records remain exposed to current settings, so poll and simulate before settlement |
+| External ingress/delivery eligibility (real venue round state, CRM platform whitelist, L2 campaign creation) | the venue/bridge/destination chain | never | changes independently of this protocol; an L1 receipt proves recorded ingress only |
+
 ## Admission and ordinary settlement
 
 The payer approves at least the exact 10,000-crvUSD fee; a larger allowance is legal, but only that fee is pulled. Registry authentication precedes the strict trusted-validator read; all rejection paths roll back the complete listing transaction. Admission creates membership at raw weight zero, not an emissions allocation. Checker revocation/fault stops new paid listing, including owner-paid listing, but does not revalidate an existing escrow.
@@ -56,7 +71,7 @@ New adapter construction checks nonzero arguments first, then code at crvUSD and
 
 For VoteMarket base B>0, per-exclusion X and price P>0, with U=type(uint256).max, `setGasSettings` requires `X <= (U-B)/50` and then `P <= U/(B+50*X)`. Equality and X=0 are permitted; all future list lengths 0..50 are protected. Rejection is BadGasSettings before storage/event changes, not arithmetic Panic. Defaults are base2,000,000, per-exclusion50,000 and price1gwei. This is arithmetic safety, not a live quote or affordability cap.
 
-`ethDeficit(amount>0)` quotes ONE message's configured funding shortfall, independent of token amount; `ethDeficit(0)==0`. A catch-up may require several messages. Returned unused bridge ETH stays in reusable committed float, so call value need not equal net expenditure. There is no operator withdrawal/rescue of the float.
+`ethDeficit(amount>0)` quotes ONE message's configured funding shortfall, independent of token amount; `ethDeficit(0)==0` is a deliberate no-message query. A positive return is not funding readiness and not a quote conditioned on the core's binding — it prices one message under current settings while a catch-up may require several messages. Returned unused bridge ETH stays in reusable committed float, so call value need not equal net expenditure. There is no operator withdrawal/rescue of the float.
 
 ## VoteMarket residuals and delivery limits
 
