@@ -1,0 +1,74 @@
+{
+  "status": "PASS",
+  "candidate": "d88d633c64fde7b3f37e29d846f744747186a688",
+  "authority_head_at_validation": "d88d633c64fde7b3f37e29d846f744747186a688",
+  "verification_scope": "Static authority artifacts, frozen bytes and saved inventory reconciliation only",
+  "fresh_product_build_or_test_execution": false,
+  "all_candidate_tracked_files_unchanged_and_equal_to_audit_snapshot": 53,
+  "sealed_inputs_unchanged_except_three_authorized_carriers": true,
+  "census": {
+    "default": {
+      "identities": 77,
+      "set_equality": true,
+      "duplicates": 0
+    },
+    "fork": {
+      "identities": 13,
+      "set_equality": true,
+      "duplicates": 0
+    }
+  },
+  "dispositions": {
+    "C01": "DEFER",
+    "C02": "DEFER",
+    "C03": "ADOPT",
+    "C04": "DEFER",
+    "C05": "ADOPT",
+    "C06": "REJECT",
+    "C07": "ADOPT",
+    "C08": "REJECT",
+    "C09": "REJECT",
+    "C10": "REJECT",
+    "C11": "REJECT",
+    "C12": "REJECT",
+    "C13": "ADOPT",
+    "C14": "REJECT",
+    "C15": "ADOPT",
+    "C16": "REJECT"
+  },
+  "disposition_counts": {
+    "ADOPT": 5,
+    "DEFER": 3,
+    "REJECT": 8
+  },
+  "historical_fork_approval_objects_verified": {
+    "45a73a2979b53f5514d00014ea34f4c05851b6de": "508a0459bed332b922640ede361ea190ff3803418578e693db5e2adf11eff2a6",
+    "74f0484fba2f0e47591d410486d46a6723a02754": "4f28f1d214de405e4c82805e229130e3f07130ba63b45bc31a22cce27c3e0fc4"
+  },
+  "changed_paths_at_validation": [
+    "plans/R3GATE-BRIEF.md",
+    "plans/R3GATE-WORK-ORDER.md",
+    "review/r3gate/BINDING.json",
+    "review/r3gate/FORK-CLAUSE-RESOLUTION.md",
+    "review/r3gate/RULING.md",
+    "review/r3gate/VALIDATION.json",
+    "review/r3gate/verify.py",
+    "review/simplify2/AUTH-EVIDENCE-INDEX.md",
+    "review/simplify2/CTL-CALLER-ROLE-GATE.md",
+    "review/simplify2/FD-BOUND-OBLIGATION.md"
+  ],
+  "scope_check": "PASS",
+  "git_diff_check_exit": 0,
+  "document_sha256": {
+    "plans/R3GATE-BRIEF.md": "b5eafb35063716802a29c96859a8f59e70d96f2b8a61970801806e8bffdfd628",
+    "plans/R3GATE-WORK-ORDER.md": "2e90aefd7b83c4437061251827f98188225d089276fe52e046893350896d06bc",
+    "review/r3gate/BINDING.json": "519d60328242e57550374bd280661edbb1a21ff3d9fb3c5e482b2249ab6780c0",
+    "review/r3gate/FORK-CLAUSE-RESOLUTION.md": "d19d9912caa0dd752a09d714c201ac2a4cf5a453704ff01d36786ad9fb4d1848",
+    "review/r3gate/RULING.md": "201e9d9e69d25a9024076783e91f4209e4021e7ae62a3b3edd35e10fa03185db",
+    "review/r3gate/verify.py": "5f58f187d7f085d0d007556599de409d8501d981d935fd612b4757a075dcbcee",
+    "review/simplify2/AUTH-EVIDENCE-INDEX.md": "b52bcda8515f2d649c30febcca77da56b2447e30e2ff1aa6c64e44da1bf20d31",
+    "review/simplify2/CTL-CALLER-ROLE-GATE.md": "e15a9630fb9b0a66d841cbaf90eaa13f2f81b7ba64a852deae5fe69e49ba7706",
+    "review/simplify2/FD-BOUND-OBLIGATION.md": "ac0f1d1da8cea27bcb46324d7743aa4873632280afb9ae63836775addf053a44"
+  },
+  "semantic_review_boundary": "Mechanical checks supplement, not substitute for, the authority's source-bound ruling"
+}
