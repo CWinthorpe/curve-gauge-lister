@@ -1,0 +1,10 @@
+Authority checker first invocation: python3 review/v1align/check_authority.py; exit 1.
+
+Observed local evidence-parser failure, not a failed Forge test:
+  File "review/v1align/check_authority.py", line 155
+    assert passed == native, (filename, native - passed, passed - native)
+  AssertionError for test-default-unset.txt.
+
+Cause: Forge --list --json reported bare names (for example test_PaidListingTransfersExactFeeIntoEscrow), while its native PASS lines reported compiled signatures (test_PaidListingTransfersExactFeeIntoEscrow()). The fuzz identity had a uint256 argument; appending () to every name would be incorrect.
+
+Correction: derive_manifest.py now binds each enumerated name to exactly one native compiled methodIdentifier signature and publishes the baseline/target signature plus escaped anchored selector regex. check_authority.py compares the full executed signature set against those derived identities, while retaining the exact unmodified bare-name --list inventory separately. No test was added, removed, rerun as a substitute or reported failed because of this parser error. The following successful authority-check.json, if present, is the corrected validation result.

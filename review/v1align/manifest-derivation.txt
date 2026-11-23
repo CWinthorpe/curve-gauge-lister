@@ -1,0 +1,863 @@
+{
+  "manifest_counts": {
+    "constructor": 1,
+    "function": 30,
+    "event": 10,
+    "error": 33
+  },
+  "census": {
+    "default": {
+      "RETAIN_V1": 69,
+      "RETIRE_BOUNTY": 57,
+      "PORT_TRUST": 8,
+      "RETIRE_V2_TWIN": 64
+    },
+    "fork": {
+      "RETAIN_V1": 11,
+      "PORT_TRUST": 2,
+      "RETIRE_BOUNTY": 9
+    }
+  },
+  "expected": {
+    "default": 77,
+    "fork": 13
+  },
+  "v1_storage": {
+    "storage": [
+      {
+        "astId": 113,
+        "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+        "label": "owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 115,
+        "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+        "label": "pendingOwner",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 117,
+        "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+        "label": "paused",
+        "offset": 20,
+        "slot": "1",
+        "type": "t_bool"
+      },
+      {
+        "astId": 120,
+        "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+        "label": "_admissionConfig",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_struct(AdmissionConfig)27_storage"
+      },
+      {
+        "astId": 123,
+        "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+        "label": "_platformConfig",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_struct(PlatformConfig)34_storage"
+      },
+      {
+        "astId": 152,
+        "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+        "label": "_listings",
+        "offset": 0,
+        "slot": "5",
+        "type": "t_mapping(t_address,t_struct(StoredListing)147_storage)"
+      },
+      {
+        "astId": 155,
+        "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+        "label": "totalEscrow",
+        "offset": 0,
+        "slot": "6",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 159,
+        "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+        "label": "_lockState",
+        "offset": 0,
+        "slot": "7",
+        "type": "t_uint256"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_enum(Status)22": {
+        "encoding": "inplace",
+        "label": "enum CurveGaugeLister.Status",
+        "numberOfBytes": "1"
+      },
+      "t_int128": {
+        "encoding": "inplace",
+        "label": "int128",
+        "numberOfBytes": "16"
+      },
+      "t_mapping(t_address,t_struct(StoredListing)147_storage)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => struct CurveGaugeLister.StoredListing)",
+        "numberOfBytes": "32",
+        "value": "t_struct(StoredListing)147_storage"
+      },
+      "t_struct(AdmissionConfig)27_storage": {
+        "encoding": "inplace",
+        "label": "struct CurveGaugeLister.AdmissionConfig",
+        "numberOfBytes": "32",
+        "members": [
+          {
+            "astId": 24,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "registry",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 26,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "maxCoins",
+            "offset": 20,
+            "slot": "0",
+            "type": "t_uint8"
+          }
+        ]
+      },
+      "t_struct(PlatformConfig)34_storage": {
+        "encoding": "inplace",
+        "label": "struct CurveGaugeLister.PlatformConfig",
+        "numberOfBytes": "64",
+        "members": [
+          {
+            "astId": 29,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "votium",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 31,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "voteMarket",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 33,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "votiumBps",
+            "offset": 20,
+            "slot": "1",
+            "type": "t_uint16"
+          }
+        ]
+      },
+      "t_struct(StoredListing)147_storage": {
+        "encoding": "inplace",
+        "label": "struct CurveGaugeLister.StoredListing",
+        "numberOfBytes": "256",
+        "members": [
+          {
+            "astId": 125,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "pool",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 128,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "status",
+            "offset": 20,
+            "slot": "0",
+            "type": "t_enum(Status)22"
+          },
+          {
+            "astId": 130,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "epochsReleased",
+            "offset": 21,
+            "slot": "0",
+            "type": "t_uint8"
+          },
+          {
+            "astId": 132,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "lpToken",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 134,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "payer",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_address"
+          },
+          {
+            "astId": 136,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "admissionRegistry",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_address"
+          },
+          {
+            "astId": 138,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "gaugeType",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_int128"
+          },
+          {
+            "astId": 140,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "listingEpoch",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_uint256"
+          },
+          {
+            "astId": 142,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "votium",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_address"
+          },
+          {
+            "astId": 144,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "voteMarket",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_address"
+          },
+          {
+            "astId": 146,
+            "contract": "contracts/CurveGaugeLister.sol:CurveGaugeLister",
+            "label": "votiumBps",
+            "offset": 20,
+            "slot": "7",
+            "type": "t_uint16"
+          }
+        ]
+      },
+      "t_uint16": {
+        "encoding": "inplace",
+        "label": "uint16",
+        "numberOfBytes": "2"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      },
+      "t_uint8": {
+        "encoding": "inplace",
+        "label": "uint8",
+        "numberOfBytes": "1"
+      }
+    }
+  },
+  "v2_storage": {
+    "storage": [
+      {
+        "astId": 2551,
+        "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+        "label": "owner",
+        "offset": 0,
+        "slot": "0",
+        "type": "t_address"
+      },
+      {
+        "astId": 2553,
+        "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+        "label": "pendingOwner",
+        "offset": 0,
+        "slot": "1",
+        "type": "t_address"
+      },
+      {
+        "astId": 2556,
+        "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+        "label": "paused",
+        "offset": 20,
+        "slot": "1",
+        "type": "t_bool"
+      },
+      {
+        "astId": 2559,
+        "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+        "label": "_admissionConfig",
+        "offset": 0,
+        "slot": "2",
+        "type": "t_struct(AdmissionConfig)2488_storage"
+      },
+      {
+        "astId": 2562,
+        "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+        "label": "_platformConfig",
+        "offset": 0,
+        "slot": "3",
+        "type": "t_struct(PlatformConfig)2495_storage"
+      },
+      {
+        "astId": 2595,
+        "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+        "label": "_listings",
+        "offset": 0,
+        "slot": "5",
+        "type": "t_mapping(t_address,t_struct(StoredListing)2590_storage)"
+      },
+      {
+        "astId": 2598,
+        "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+        "label": "totalEscrow",
+        "offset": 0,
+        "slot": "6",
+        "type": "t_uint256"
+      },
+      {
+        "astId": 2602,
+        "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+        "label": "_lockState",
+        "offset": 0,
+        "slot": "7",
+        "type": "t_uint256"
+      }
+    ],
+    "types": {
+      "t_address": {
+        "encoding": "inplace",
+        "label": "address",
+        "numberOfBytes": "20"
+      },
+      "t_bool": {
+        "encoding": "inplace",
+        "label": "bool",
+        "numberOfBytes": "1"
+      },
+      "t_bytes32": {
+        "encoding": "inplace",
+        "label": "bytes32",
+        "numberOfBytes": "32"
+      },
+      "t_enum(Status)2482": {
+        "encoding": "inplace",
+        "label": "enum CurveGaugeListerV2.Status",
+        "numberOfBytes": "1"
+      },
+      "t_int128": {
+        "encoding": "inplace",
+        "label": "int128",
+        "numberOfBytes": "16"
+      },
+      "t_mapping(t_address,t_struct(StoredListing)2590_storage)": {
+        "encoding": "mapping",
+        "key": "t_address",
+        "label": "mapping(address => struct CurveGaugeListerV2.StoredListing)",
+        "numberOfBytes": "32",
+        "value": "t_struct(StoredListing)2590_storage"
+      },
+      "t_struct(AdmissionConfig)2488_storage": {
+        "encoding": "inplace",
+        "label": "struct CurveGaugeListerV2.AdmissionConfig",
+        "numberOfBytes": "32",
+        "members": [
+          {
+            "astId": 2485,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "registry",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 2487,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "maxCoins",
+            "offset": 20,
+            "slot": "0",
+            "type": "t_uint8"
+          }
+        ]
+      },
+      "t_struct(PlatformConfig)2495_storage": {
+        "encoding": "inplace",
+        "label": "struct CurveGaugeListerV2.PlatformConfig",
+        "numberOfBytes": "64",
+        "members": [
+          {
+            "astId": 2490,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "votium",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 2492,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "voteMarket",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 2494,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "votiumBps",
+            "offset": 20,
+            "slot": "1",
+            "type": "t_uint16"
+          }
+        ]
+      },
+      "t_struct(StoredListing)2590_storage": {
+        "encoding": "inplace",
+        "label": "struct CurveGaugeListerV2.StoredListing",
+        "numberOfBytes": "320",
+        "members": [
+          {
+            "astId": 2564,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "pool",
+            "offset": 0,
+            "slot": "0",
+            "type": "t_address"
+          },
+          {
+            "astId": 2567,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "status",
+            "offset": 20,
+            "slot": "0",
+            "type": "t_enum(Status)2482"
+          },
+          {
+            "astId": 2569,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "epochsReleased",
+            "offset": 21,
+            "slot": "0",
+            "type": "t_uint8"
+          },
+          {
+            "astId": 2571,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "lpToken",
+            "offset": 0,
+            "slot": "1",
+            "type": "t_address"
+          },
+          {
+            "astId": 2573,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "payer",
+            "offset": 0,
+            "slot": "2",
+            "type": "t_address"
+          },
+          {
+            "astId": 2575,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "admissionRegistry",
+            "offset": 0,
+            "slot": "3",
+            "type": "t_address"
+          },
+          {
+            "astId": 2577,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "gaugeType",
+            "offset": 0,
+            "slot": "4",
+            "type": "t_int128"
+          },
+          {
+            "astId": 2579,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "listingEpoch",
+            "offset": 0,
+            "slot": "5",
+            "type": "t_uint256"
+          },
+          {
+            "astId": 2581,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "votium",
+            "offset": 0,
+            "slot": "6",
+            "type": "t_address"
+          },
+          {
+            "astId": 2583,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "voteMarket",
+            "offset": 0,
+            "slot": "7",
+            "type": "t_address"
+          },
+          {
+            "astId": 2585,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "votiumBps",
+            "offset": 20,
+            "slot": "7",
+            "type": "t_uint16"
+          },
+          {
+            "astId": 2587,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "reporterReward",
+            "offset": 0,
+            "slot": "8",
+            "type": "t_uint256"
+          },
+          {
+            "astId": 2589,
+            "contract": "contracts/CurveGaugeListerV2.sol:CurveGaugeListerV2",
+            "label": "rewardReportId",
+            "offset": 0,
+            "slot": "9",
+            "type": "t_bytes32"
+          }
+        ]
+      },
+      "t_uint16": {
+        "encoding": "inplace",
+        "label": "uint16",
+        "numberOfBytes": "2"
+      },
+      "t_uint256": {
+        "encoding": "inplace",
+        "label": "uint256",
+        "numberOfBytes": "32"
+      },
+      "t_uint8": {
+        "encoding": "inplace",
+        "label": "uint8",
+        "numberOfBytes": "1"
+      }
+    }
+  },
+  "target_functions": {
+    "BPS()": "249d39e9",
+    "EPOCHS()": "a37b4004",
+    "FEE()": "c57981b5",
+    "INITIAL_WEIGHT()": "ca632700",
+    "QUARTER()": "038c0f77",
+    "WEEK()": "f4359ce5",
+    "acceptOwnership()": "79ba5097",
+    "checkpoint(address)": "a972985e",
+    "checkpointFees()": "4decdb00",
+    "confiscate(address)": "44f252a0",
+    "controller()": "f77c4791",
+    "crvUSD()": "9bec8288",
+    "epochStart(uint256)": "aa9354a3",
+    "epochsElapsed(address)": "050ec5af",
+    "feeDistributor()": "0d43e8ad",
+    "getAdmissionConfig()": "de893bb7",
+    "getListing(address)": "084af0b2",
+    "getPlatformConfig()": "18285ff7",
+    "listGauge(address,address,uint256,uint256)": "6b88dac8",
+    "listGaugeNoEscrow(address,address,uint256,uint256,uint256)": "f8dac744",
+    "owner()": "8da5cb5b",
+    "paused()": "5c975abb",
+    "pendingOwner()": "e30c3978",
+    "releasable(address)": "a3f8eace",
+    "setAdmissionConfig((address,uint8))": "ffea57d0",
+    "setPaused(bool)": "16c38b3c",
+    "setPlatformConfig((address,address,uint16))": "fae1a5fb",
+    "totalEscrow()": "a3d89844",
+    "transferOwnership(address)": "f2fde38b",
+    "trustedGaugeValidator()": "3ca09961"
+  },
+  "errors": [
+    {
+      "type": "error",
+      "name": "AlreadyListed",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "BadAdmissionConfig",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BadCoin",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BadCoinCount",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BadGaugeType",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BadLpToken",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BadPlatformConfig",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ConfiscationDeltaMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ControllerRegistryOccupied",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "DistributorUnusable",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "FeeDeltaMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "GaugeKilledAtAdmission",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "GaugeMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "IndexOutOfRange",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ListingsPaused",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "MembershipFailed",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "NoCode",
+      "inputs": [
+        {
+          "name": "target",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "NotOwner",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "NotPendingOwner",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "PlatformDeltaMismatch",
+      "inputs": [
+        {
+          "name": "platform",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "PlatformNotReady",
+      "inputs": [
+        {
+          "name": "platform",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "PlatformReceiptMissing",
+      "inputs": [
+        {
+          "name": "platform",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "PoolNotRegistered",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "Reentrancy",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "SafeTokenBadReturn",
+      "inputs": [
+        {
+          "name": "token",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SafeTokenCallFailed",
+      "inputs": [
+        {
+          "name": "token",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "SafeTokenNoCode",
+      "inputs": [
+        {
+          "name": "token",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "UnknownGauge",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "ZeroOwner",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "ZeroTarget",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "TrustedGaugeCheckFailed",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "UntrustedGauge",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "WrongChain",
+      "inputs": []
+    }
+  ],
+  "remove": [
+    "contracts/CurveGaugeListerV2.sol",
+    "contracts/GaugeBounty.sol",
+    "contracts/bounty/BountyTypes.sol",
+    "contracts/interfaces/IBountyGovernance.sol",
+    "contracts/interfaces/ICurveGaugeListerV2.sol",
+    "contracts/interfaces/IGaugeBounty.sol",
+    "contracts/interfaces/IOwnershipVoting.sol",
+    "contracts/libraries/BountyRead.sol",
+    "contracts/libraries/BountyScripts.sol",
+    "contracts/libraries/FeeDistributorAccounting.sol"
+  ],
+  "hardcoded_artifact_check": {
+    "VotiumAdapter.sol/VotiumAdapter.json": {
+      "abi_equal": true,
+      "methodIdentifiers_equal": true,
+      "runtime_equal": true
+    },
+    "VoteMarketAdapter.sol/VoteMarketAdapter.json": {
+      "abi_equal": true,
+      "methodIdentifiers_equal": true,
+      "runtime_equal": true
+    }
+  }
+}

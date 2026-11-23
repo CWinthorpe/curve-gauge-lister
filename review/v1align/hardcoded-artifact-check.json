@@ -1,0 +1,12 @@
+{
+  "VotiumAdapter.sol/VotiumAdapter.json": {
+    "abi_equal": true,
+    "methodIdentifiers_equal": true,
+    "runtime_equal": true
+  },
+  "VoteMarketAdapter.sol/VoteMarketAdapter.json": {
+    "abi_equal": true,
+    "methodIdentifiers_equal": true,
+    "runtime_equal": true
+  }
+}

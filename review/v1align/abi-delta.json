@@ -1,0 +1,1028 @@
+{
+  "candidate": "e18bee54c08832dd7fd6d0a11932290155bf9178",
+  "key_policy": "ABI entry type and canonical input signature; changed entries retain complete original objects, including internalType metadata",
+  "only_v1": [
+    {
+      "type": "constructor",
+      "inputs": [
+        {
+          "name": "owner_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "crvUSD_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "controller_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "feeDistributor_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "admission_",
+          "type": "tuple",
+          "internalType": "struct CurveGaugeLister.AdmissionConfig",
+          "components": [
+            {
+              "name": "registry",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "maxCoins",
+              "type": "uint8",
+              "internalType": "uint8"
+            }
+          ]
+        },
+        {
+          "name": "platforms_",
+          "type": "tuple",
+          "internalType": "struct CurveGaugeLister.PlatformConfig",
+          "components": [
+            {
+              "name": "votium",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "voteMarket",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "votiumBps",
+              "type": "uint16",
+              "internalType": "uint16"
+            }
+          ]
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "event",
+      "name": "EscrowConfiscated",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "feeDistributor",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "amount",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "receiptWeek",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        }
+      ],
+      "anonymous": false
+    }
+  ],
+  "only_v2": [
+    {
+      "type": "constructor",
+      "inputs": [
+        {
+          "name": "owner_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "crvUSD_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "controller_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "feeDistributor_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "admission_",
+          "type": "tuple",
+          "internalType": "struct CurveGaugeListerV2.AdmissionConfig",
+          "components": [
+            {
+              "name": "registry",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "maxCoins",
+              "type": "uint8",
+              "internalType": "uint8"
+            }
+          ]
+        },
+        {
+          "name": "platforms_",
+          "type": "tuple",
+          "internalType": "struct CurveGaugeListerV2.PlatformConfig",
+          "components": [
+            {
+              "name": "votium",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "voteMarket",
+              "type": "address",
+              "internalType": "address"
+            },
+            {
+              "name": "votiumBps",
+              "type": "uint16",
+              "internalType": "uint16"
+            }
+          ]
+        },
+        {
+          "name": "bounty_",
+          "type": "address",
+          "internalType": "address"
+        },
+        {
+          "name": "trustedGaugeValidator_",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "nonpayable"
+    },
+    {
+      "type": "error",
+      "name": "BadBounty",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BountyDeltaMismatch",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "BountyNotReady",
+      "inputs": []
+    },
+    {
+      "type": "error",
+      "name": "TrustedGaugeCheckFailed",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "UntrustedGauge",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "internalType": "address"
+        }
+      ]
+    },
+    {
+      "type": "error",
+      "name": "WrongChain",
+      "inputs": []
+    },
+    {
+      "type": "event",
+      "name": "EscrowConfiscated",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "feeDistributor",
+          "type": "address",
+          "indexed": true,
+          "internalType": "address"
+        },
+        {
+          "name": "reportId",
+          "type": "bytes32",
+          "indexed": true,
+          "internalType": "bytes32"
+        },
+        {
+          "name": "gross",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "reporterReward",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "fdConfiscated",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        },
+        {
+          "name": "receiptWeek",
+          "type": "uint256",
+          "indexed": false,
+          "internalType": "uint256"
+        }
+      ],
+      "anonymous": false
+    },
+    {
+      "type": "function",
+      "name": "bounty",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "listingId",
+      "inputs": [
+        {
+          "name": "gauge",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "outputs": [
+        {
+          "name": "",
+          "type": "bytes32",
+          "internalType": "bytes32"
+        }
+      ],
+      "stateMutability": "view"
+    },
+    {
+      "type": "function",
+      "name": "trustedGaugeValidator",
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "",
+          "type": "address",
+          "internalType": "address"
+        }
+      ],
+      "stateMutability": "view"
+    }
+  ],
+  "common_changed": [
+    {
+      "key": [
+        "function",
+        "getAdmissionConfig()"
+      ],
+      "v1": {
+        "type": "function",
+        "name": "getAdmissionConfig",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeLister.AdmissionConfig",
+            "components": [
+              {
+                "name": "registry",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "maxCoins",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      },
+      "v2": {
+        "type": "function",
+        "name": "getAdmissionConfig",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeListerV2.AdmissionConfig",
+            "components": [
+              {
+                "name": "registry",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "maxCoins",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      }
+    },
+    {
+      "key": [
+        "function",
+        "getListing(address)"
+      ],
+      "v1": {
+        "type": "function",
+        "name": "getListing",
+        "inputs": [
+          {
+            "name": "gauge",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeLister.Listing",
+            "components": [
+              {
+                "name": "pool",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "lpToken",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "payer",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "admissionRegistry",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "gaugeType",
+                "type": "int128",
+                "internalType": "int128"
+              },
+              {
+                "name": "listingEpoch",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "enum CurveGaugeLister.Status"
+              },
+              {
+                "name": "epochsReleased",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "deposited",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "remaining",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "released",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "confiscated",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "votium",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "voteMarket",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "votiumBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      },
+      "v2": {
+        "type": "function",
+        "name": "getListing",
+        "inputs": [
+          {
+            "name": "gauge",
+            "type": "address",
+            "internalType": "address"
+          }
+        ],
+        "outputs": [
+          {
+            "name": "result",
+            "type": "tuple",
+            "internalType": "struct ICurveGaugeListerV2.ListingV2",
+            "components": [
+              {
+                "name": "pool",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "lpToken",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "payer",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "admissionRegistry",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "gaugeType",
+                "type": "int128",
+                "internalType": "int128"
+              },
+              {
+                "name": "listingEpoch",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "status",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "epochsReleased",
+                "type": "uint8",
+                "internalType": "uint8"
+              },
+              {
+                "name": "deposited",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "remaining",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "released",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "confiscated",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "votium",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "voteMarket",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "votiumBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              },
+              {
+                "name": "reporterReward",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "fdConfiscated",
+                "type": "uint256",
+                "internalType": "uint256"
+              },
+              {
+                "name": "rewardReportId",
+                "type": "bytes32",
+                "internalType": "bytes32"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      }
+    },
+    {
+      "key": [
+        "function",
+        "getPlatformConfig()"
+      ],
+      "v1": {
+        "type": "function",
+        "name": "getPlatformConfig",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeLister.PlatformConfig",
+            "components": [
+              {
+                "name": "votium",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "voteMarket",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "votiumBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      },
+      "v2": {
+        "type": "function",
+        "name": "getPlatformConfig",
+        "inputs": [],
+        "outputs": [
+          {
+            "name": "",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeListerV2.PlatformConfig",
+            "components": [
+              {
+                "name": "votium",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "voteMarket",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "votiumBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              }
+            ]
+          }
+        ],
+        "stateMutability": "view"
+      }
+    },
+    {
+      "key": [
+        "function",
+        "setAdmissionConfig((address,uint8))"
+      ],
+      "v1": {
+        "type": "function",
+        "name": "setAdmissionConfig",
+        "inputs": [
+          {
+            "name": "config",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeLister.AdmissionConfig",
+            "components": [
+              {
+                "name": "registry",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "maxCoins",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+      },
+      "v2": {
+        "type": "function",
+        "name": "setAdmissionConfig",
+        "inputs": [
+          {
+            "name": "config",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeListerV2.AdmissionConfig",
+            "components": [
+              {
+                "name": "registry",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "maxCoins",
+                "type": "uint8",
+                "internalType": "uint8"
+              }
+            ]
+          }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+      }
+    },
+    {
+      "key": [
+        "function",
+        "setPlatformConfig((address,address,uint16))"
+      ],
+      "v1": {
+        "type": "function",
+        "name": "setPlatformConfig",
+        "inputs": [
+          {
+            "name": "config",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeLister.PlatformConfig",
+            "components": [
+              {
+                "name": "votium",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "voteMarket",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "votiumBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              }
+            ]
+          }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+      },
+      "v2": {
+        "type": "function",
+        "name": "setPlatformConfig",
+        "inputs": [
+          {
+            "name": "config",
+            "type": "tuple",
+            "internalType": "struct CurveGaugeListerV2.PlatformConfig",
+            "components": [
+              {
+                "name": "votium",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "voteMarket",
+                "type": "address",
+                "internalType": "address"
+              },
+              {
+                "name": "votiumBps",
+                "type": "uint16",
+                "internalType": "uint16"
+              }
+            ]
+          }
+        ],
+        "outputs": [],
+        "stateMutability": "nonpayable"
+      }
+    }
+  ],
+  "common_exact_equal": [
+    [
+      "error",
+      "AlreadyListed(address)"
+    ],
+    [
+      "error",
+      "BadAdmissionConfig()"
+    ],
+    [
+      "error",
+      "BadCoin()"
+    ],
+    [
+      "error",
+      "BadCoinCount()"
+    ],
+    [
+      "error",
+      "BadGaugeType()"
+    ],
+    [
+      "error",
+      "BadLpToken()"
+    ],
+    [
+      "error",
+      "BadPlatformConfig()"
+    ],
+    [
+      "error",
+      "ConfiscationDeltaMismatch()"
+    ],
+    [
+      "error",
+      "ControllerRegistryOccupied(address)"
+    ],
+    [
+      "error",
+      "DistributorUnusable()"
+    ],
+    [
+      "error",
+      "FeeDeltaMismatch()"
+    ],
+    [
+      "error",
+      "GaugeKilledAtAdmission()"
+    ],
+    [
+      "error",
+      "GaugeMismatch()"
+    ],
+    [
+      "error",
+      "IndexOutOfRange()"
+    ],
+    [
+      "error",
+      "ListingsPaused()"
+    ],
+    [
+      "error",
+      "MembershipFailed()"
+    ],
+    [
+      "error",
+      "NoCode(address)"
+    ],
+    [
+      "error",
+      "NotOwner()"
+    ],
+    [
+      "error",
+      "NotPendingOwner()"
+    ],
+    [
+      "error",
+      "PlatformDeltaMismatch(address)"
+    ],
+    [
+      "error",
+      "PlatformNotReady(address)"
+    ],
+    [
+      "error",
+      "PlatformReceiptMissing(address)"
+    ],
+    [
+      "error",
+      "PoolNotRegistered()"
+    ],
+    [
+      "error",
+      "Reentrancy()"
+    ],
+    [
+      "error",
+      "SafeTokenBadReturn(address)"
+    ],
+    [
+      "error",
+      "SafeTokenCallFailed(address)"
+    ],
+    [
+      "error",
+      "SafeTokenNoCode(address)"
+    ],
+    [
+      "error",
+      "UnknownGauge(address)"
+    ],
+    [
+      "error",
+      "ZeroOwner()"
+    ],
+    [
+      "error",
+      "ZeroTarget()"
+    ],
+    [
+      "event",
+      "AdmissionConfigSet(address,uint8)"
+    ],
+    [
+      "event",
+      "FeeCheckpointResult(bool)"
+    ],
+    [
+      "event",
+      "GaugeListed(address,address,address,int128,uint256,uint256,bool)"
+    ],
+    [
+      "event",
+      "OwnershipTransferStarted(address,address)"
+    ],
+    [
+      "event",
+      "OwnershipTransferred(address,address)"
+    ],
+    [
+      "event",
+      "PauseSet(bool)"
+    ],
+    [
+      "event",
+      "PlatformConfigSet(address,address,uint16)"
+    ],
+    [
+      "event",
+      "PlatformDeposit(address,address,uint256,uint256,uint256,bytes32)"
+    ],
+    [
+      "event",
+      "QuarterReleased(address,uint256,uint256,uint256)"
+    ],
+    [
+      "function",
+      "BPS()"
+    ],
+    [
+      "function",
+      "EPOCHS()"
+    ],
+    [
+      "function",
+      "FEE()"
+    ],
+    [
+      "function",
+      "INITIAL_WEIGHT()"
+    ],
+    [
+      "function",
+      "QUARTER()"
+    ],
+    [
+      "function",
+      "WEEK()"
+    ],
+    [
+      "function",
+      "acceptOwnership()"
+    ],
+    [
+      "function",
+      "checkpoint(address)"
+    ],
+    [
+      "function",
+      "checkpointFees()"
+    ],
+    [
+      "function",
+      "confiscate(address)"
+    ],
+    [
+      "function",
+      "controller()"
+    ],
+    [
+      "function",
+      "crvUSD()"
+    ],
+    [
+      "function",
+      "epochStart(uint256)"
+    ],
+    [
+      "function",
+      "epochsElapsed(address)"
+    ],
+    [
+      "function",
+      "feeDistributor()"
+    ],
+    [
+      "function",
+      "listGauge(address,address,uint256,uint256)"
+    ],
+    [
+      "function",
+      "listGaugeNoEscrow(address,address,uint256,uint256,uint256)"
+    ],
+    [
+      "function",
+      "owner()"
+    ],
+    [
+      "function",
+      "paused()"
+    ],
+    [
+      "function",
+      "pendingOwner()"
+    ],
+    [
+      "function",
+      "releasable(address)"
+    ],
+    [
+      "function",
+      "setPaused(bool)"
+    ],
+    [
+      "function",
+      "totalEscrow()"
+    ],
+    [
+      "function",
+      "transferOwnership(address)"
+    ]
+  ]
+}

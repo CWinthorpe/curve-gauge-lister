@@ -1,0 +1,234 @@
+{
+  "routines": [
+    {
+      "name": "_admit",
+      "raw_equal": false,
+      "tokens_equal": true
+    },
+    {
+      "name": "_cappedElapsed",
+      "raw_equal": false,
+      "tokens_equal": true
+    },
+    {
+      "name": "_confiscate",
+      "raw_equal": false,
+      "tokens_equal": false
+    },
+    {
+      "name": "_fundPlatform",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "_gaugeKilled",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "_remaining",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "_requireBountyReady",
+      "raw_equal": false,
+      "tokens_equal": false
+    },
+    {
+      "name": "_requirePlatformReady",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "_requirePlatformsReady",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "_requireTrustedGauge",
+      "raw_equal": false,
+      "tokens_equal": false
+    },
+    {
+      "name": "_routeQuarter",
+      "raw_equal": false,
+      "tokens_equal": true
+    },
+    {
+      "name": "_tryCheckpointToken",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "_validateAdmission",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "_validatePlatformTarget",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "_validatePlatforms",
+      "raw_equal": false,
+      "tokens_equal": true
+    },
+    {
+      "name": "acceptOwnership",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "checkpoint",
+      "raw_equal": false,
+      "tokens_equal": true
+    },
+    {
+      "name": "checkpointFees",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "confiscate",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "constructor",
+      "raw_equal": false,
+      "tokens_equal": false
+    },
+    {
+      "name": "epochStart",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "epochsElapsed",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "getAdmissionConfig",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "getListing",
+      "raw_equal": false,
+      "tokens_equal": false
+    },
+    {
+      "name": "getPlatformConfig",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "listGauge",
+      "raw_equal": false,
+      "tokens_equal": false
+    },
+    {
+      "name": "listGaugeNoEscrow",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "listingId",
+      "raw_equal": false,
+      "tokens_equal": false
+    },
+    {
+      "name": "lock",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "onlyOwner",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "releasable",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "setAdmissionConfig",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "setPaused",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "setPlatformConfig",
+      "raw_equal": true,
+      "tokens_equal": true
+    },
+    {
+      "name": "transferOwnership",
+      "raw_equal": true,
+      "tokens_equal": true
+    }
+  ],
+  "accounting": {
+    "substitutions_v1_to_library": {
+      "crvUSD": "token",
+      "listerBefore": "senderBefore",
+      "epochStart(t)": "BountyScripts.weekFloor(t)",
+      "20 * WEEK": "ACCOUNTING_HORIZON_WEEKS * WEEK"
+    },
+    "brace_normalization": "unwrap a block containing only revert DistributorUnusable(); on both sides",
+    "preflight_equal_after_declared_normalization": true,
+    "deposit_and_account_equal_after_declared_normalization": true,
+    "v1_preflight_raw_sha256": "cd4006ad5030d574789064cb462353260f0442f2ce698cb63081c70a4c6535c2",
+    "library_preflight_raw_sha256": "ab6ec907233ede20d554a4ebfca40332254aa66026f645edcc3439669daf693d",
+    "v1_postflight_raw_sha256": "0b17752e32a99cb3d66554a418af01d14ef67fd9c59fca198b1823701df6c827",
+    "library_postflight_raw_sha256": "6e8e050505a09fd267a772641889bc8d172077d4532dafaf720de66eead85ea3"
+  },
+  "closures": {
+    "v1": [
+      "contracts/CurveGaugeLister.sol",
+      "contracts/adapters/VoteMarketAdapter.sol",
+      "contracts/adapters/VotiumAdapter.sol",
+      "contracts/interfaces/ICampaignRemoteManager.sol",
+      "contracts/interfaces/ICurveGauge.sol",
+      "contracts/interfaces/ICurveRegistry.sol",
+      "contracts/interfaces/IERC20Minimal.sol",
+      "contracts/interfaces/IFeeDistributor.sol",
+      "contracts/interfaces/IIncentivePlatform.sol",
+      "contracts/interfaces/IListingController.sol",
+      "contracts/interfaces/IVotiumV2.sol",
+      "contracts/libraries/SafeToken.sol"
+    ],
+    "v2_with_bounty": [
+      "contracts/CurveGaugeListerV2.sol",
+      "contracts/GaugeBounty.sol",
+      "contracts/adapters/VoteMarketAdapter.sol",
+      "contracts/adapters/VotiumAdapter.sol",
+      "contracts/bounty/BountyTypes.sol",
+      "contracts/interfaces/IBountyGovernance.sol",
+      "contracts/interfaces/ICampaignRemoteManager.sol",
+      "contracts/interfaces/ICurveGauge.sol",
+      "contracts/interfaces/ICurveGaugeListerV2.sol",
+      "contracts/interfaces/ICurveRegistry.sol",
+      "contracts/interfaces/IERC20Minimal.sol",
+      "contracts/interfaces/IFeeDistributor.sol",
+      "contracts/interfaces/IGaugeBounty.sol",
+      "contracts/interfaces/IIncentivePlatform.sol",
+      "contracts/interfaces/IListingController.sol",
+      "contracts/interfaces/IOwnershipVoting.sol",
+      "contracts/interfaces/ITrustedGaugeValidator.sol",
+      "contracts/interfaces/IVotiumV2.sol",
+      "contracts/libraries/BountyRead.sol",
+      "contracts/libraries/BountyScripts.sol",
+      "contracts/libraries/FeeDistributorAccounting.sol",
+      "contracts/libraries/SafeToken.sol"
+    ]
+  }
+}
