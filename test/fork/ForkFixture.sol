@@ -667,16 +667,34 @@ abstract contract ForkFixture is TestBase {
             CurveGaugeLister.PlatformConfig(address(t.va), address(t.vma), votiumBps),
             TRUSTED_VALIDATOR
         );
+        // S03: the witnessed production composition targets the pinned real
+        // controller; the core's immutable must equal it exactly.
+        assertEq(t.lister.controller(), CONTROLLER, "S03: composition target is the pinned GaugeController");
         fvm.startPrank(DAO);
         t.va.setLister(address(t.lister));
         t.vma.setLister(address(t.lister));
         fvm.stopPrank();
         assertEq(t.va.lister(), address(t.lister), "votium adapter bound to this core");
         assertEq(t.vma.lister(), address(t.lister), "votemarket adapter bound to this core");
-        // V1ALIGN §1.3: paused-at-construction; the owner unpauses after
-        // the verified bindings.
+        // S05: construction and binding complete PAUSED (runbook §Roles and
+        // deployment step 4). Paid admission stays disabled until the
+        // fixture calls `_activatePaidAdmission` after its own applicable
+        // prerequisites — the final activation is explicit, never implicit
+        // in the deploy step.
+        assertTrue(t.lister.paused(), "trio stays paused after deploy/bind (activation is a separate step)");
+    }
+
+    /// @dev S05: the explicit final activation step for positive rollout
+    /// fixtures — the DAO owner unpauses ONLY after the applicable
+    /// prerequisites have been arranged (bindings read back in
+    /// `_deployTrio`, plus controller seating, funding and approval where
+    /// the scenario needs them). Mirrors docs/OPERATIONS.md: paused setup,
+    /// verified activation last. Not applicable to the DAO-free lane, which
+    /// works while paused.
+    function _activatePaidAdmission(Trio memory t) internal {
         fvm.prank(DAO);
         t.lister.setPaused(false);
+        assertFalse(t.lister.paused(), "paid admission activated explicitly");
     }
 
     /// @dev Trio with a VoteMarket adapter bound to an alternate (proven
@@ -704,10 +722,8 @@ abstract contract ForkFixture is TestBase {
         fvm.stopPrank();
         assertEq(t.va.lister(), address(t.lister), "votium adapter bound to this core");
         assertEq(t.vma.lister(), address(t.lister), "votemarket adapter bound to this core");
-        // V1ALIGN §1.3: paused-at-construction; the owner unpauses after
-        // the verified bindings.
-        fvm.prank(DAO);
-        t.lister.setPaused(false);
+        // S05: stays paused after deploy/bind; activation is explicit.
+        assertTrue(t.lister.paused(), "alt-vm trio stays paused after deploy/bind");
     }
 
     /// @dev §5.2 fork-only seating: real controller two-step admin transfer
@@ -755,14 +771,17 @@ abstract contract ForkFixture is TestBase {
         assertEq(address(t.vma).balance, beforeBal + weiAmount, "adapter float credited exactly");
     }
 
-    /// @dev Full standard seed on the CURRENT fork: real trio, seating,
-    /// funding, approval, paid listing of the primary candidate.
+    /// @dev Full standard seed on the CURRENT fork: real trio (deploy/bind
+    /// paused), seating, funding, approval — then the EXPLICIT final
+    /// activation (S05) immediately before the paid listing of the primary
+    /// candidate.
     function _seedStandard(uint16 votiumBps) internal returns (Trio memory t) {
         _assertActorsDistinct();
         t = _deployTrio(votiumBps);
         _seat(t.lister);
         _fundPayer(payer(), 1);
         _approveFee(t);
+        _activatePaidAdmission(t);
         fvm.prank(payer());
         t.lister.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID);
     }
@@ -889,6 +908,12 @@ abstract contract ForkFixture is TestBase {
     // successful quarter binds both, plus the CampaignDeposit and per-leg
     // PlatformDeposit events. Shared by the VoteMarket runner's prover and
     // the Kill runner's mixed checkpoint.
+    // Provenance (S09): a receipt is an OPAQUE adapter-domain identifier —
+    // the keccak tuple below — attested only by its emitter (the adapter on
+    // chain 1, via the recorded key/index pair and the CampaignDeposit /
+    // VotiumDeposit event). It carries no destination-side meaning: neither
+    // the hash nor the local ordinal proves an L2 campaign exists or that
+    // any venue accepted a delivery.
     // ------------------------------------------------------------------
 
     function _assertAdapterRecord(Trio memory t, uint256 ts, uint256 gross, uint256 expectedLocalNonce) internal view {
@@ -1151,11 +1176,18 @@ abstract contract ForkFixture is TestBase {
     }
 
     /// @dev Expected outcome of the lister's MANDATORY in-confiscation FD
-    /// accounting (auditfix001 §3/§7): the real public gate —
-    /// `can_checkpoint_token` AND strict `block.timestamp > last_token_time +
-    /// 86400` (the lister is not FD.admin, so no admin bypass applies) — PLUS
-    /// the §3 freshness predicate: the cursor must be nonzero, not in the
-    /// future, and within 20 weeks of its week floor. Read live BEFORE the
+    /// accounting (auditfix001 §3/§7), rebound to the SELECTED allocator's
+    /// actual source and runtime (S02; docs/DEPLOYMENT-PINS.md records the
+    /// admin, public-checkpoint flag, cursor, accounted balance, custody and
+    /// the bounded-loop source at the verified runtime): the real
+    /// `CurveFeeDistribution.vy` caller rule — `can_checkpoint_token` AND
+    /// strict `block.timestamp > last_token_time + 86400` for a non-admin
+    /// caller (the lister is not FD.admin, so no admin bypass applies) —
+    /// PLUS the §3 COVERAGE predicate: the cursor must be nonzero, not in the
+    /// future, and within the core's named 20-week accounting horizon
+    /// (`FD_ACCOUNTING_HORIZON_WEEKS`, mirrored by the mock allocator's
+    /// bounded loop) of the cursor's week floor. Availability (cooldown) and
+    /// coverage are separate; neither implies the other. Read live BEFORE the
     /// call; a successful checkpoint mutates last_token_time. If this returns
     /// false, a confiscation attempt must REVERT (escrow retained).
     function _expectedFdCheckpointOk() internal view returns (bool) {

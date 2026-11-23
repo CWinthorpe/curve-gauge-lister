@@ -2,6 +2,7 @@
 pragma solidity 0.8.30;
 
 import {MockListingController} from "../../contracts/mocks/MockListingController.sol";
+import {CurveGaugeLister} from "../../contracts/CurveGaugeLister.sol";
 
 /// @dev Call shape the validator/module fixtures read off a candidate gauge:
 /// the registry-authenticated gauge's own LP association and its self-asserted
@@ -44,29 +45,23 @@ contract NoSelectorValidator {
 }
 
 /// @title TrustedFactoryModel
-/// @notice FIXTURE model of a Curve factory exposing the reciprocal lookups
-/// the pinned module authenticates against (plan §2.1): `get_gauge(token)`,
-/// `gauge_for_vault(vault)` and `is_valid_gauge(gauge)`, each with per-key
-/// revert injection so fault-vs-zero distinctions are executable. Fixture
-/// setters are unrestricted test setup, not production authority.
+/// @notice FIXTURE model of a Curve factory exposing the reciprocal lookup
+/// the pinned module authenticates against (plan §2.1): `get_gauge(token)`
+/// with per-key revert injection so fault-vs-zero distinctions are
+/// executable. The previously modelled `gauge_for_vault(vault)` and
+/// `is_valid_gauge(gauge)` arms were pruned (S07): no named witness
+/// inventory entry configures method 3 (VAULT) or method 4
+/// (FACTORY_IS_VALID_GAUGE); the exercised reciprocal-proof and
+/// direct-lookup fault controls are retained. Fixture setters are
+/// unrestricted test setup, not production authority.
 contract TrustedFactoryModel {
     error FactoryLookupFailed();
 
     mapping(address => address) private _gauges;
-    mapping(address => address) private _vaultGauges;
-    mapping(address => bool) private _valid;
     mapping(address => bool) private _revertGetGauge;
 
     function setGauge(address token, address gauge) external {
         _gauges[token] = gauge;
-    }
-
-    function setVaultGauge(address vault, address gauge) external {
-        _vaultGauges[vault] = gauge;
-    }
-
-    function setValidGauge(address gauge, bool valid) external {
-        _valid[gauge] = valid;
     }
 
     /// @notice Fault injection: make the DIRECT lookup on `token` revert
@@ -79,21 +74,15 @@ contract TrustedFactoryModel {
         if (_revertGetGauge[token]) revert FactoryLookupFailed();
         return _gauges[token];
     }
-
-    function gauge_for_vault(address vault) external view returns (address) {
-        return _vaultGauges[vault];
-    }
-
-    function is_valid_gauge(address gauge) external view returns (bool) {
-        return _valid[gauge];
-    }
 }
 
 /// @title GaugeValidationModuleModel
-/// @notice FIXTURE model of GaugeValidationModuleV1's four reciprocal proofs
-/// (plan §2.1): (1) DIRECT_LP, (2) DIRECT_OR_POOL_LP with the strict
-/// successful-zero-only minter fallback, (3) VAULT, (4) FACTORY_IS_VALID_GAUGE.
-/// A failed/malformed first lookup NEVER permits fallback. `fault` injects a
+/// @notice FIXTURE model of the two exercised GaugeValidationModuleV1
+/// reciprocal proofs (plan §2.1): (1) DIRECT_LP and (2) DIRECT_OR_POOL_LP
+/// with the strict successful-zero-only minter fallback. The idle (3) VAULT
+/// and (4) FACTORY_IS_VALID_GAUGE arms are pruned (S07, against the named
+/// witness inventory); an unsupported method still resolves to false. A
+/// failed/malformed first lookup NEVER permits fallback. `fault` injects a
 /// module-level revert, which the validator model collapses to false exactly
 /// like the real validator's internal fault handling.
 contract GaugeValidationModuleModel {
@@ -137,14 +126,9 @@ contract GaugeValidationModuleModel {
             }
             return abi.decode(dataP, (uint256)) == uint256(uint160(gauge));
         }
-        if (method == 3) {
-            // VAULT: gauge_for_vault(gauge.lp_token()) == gauge.
-            return TrustedFactoryModel(factory).gauge_for_vault(lp) == gauge;
-        }
-        if (method == 4) {
-            // FACTORY_IS_VALID_GAUGE: canonical true from the factory.
-            return TrustedFactoryModel(factory).is_valid_gauge(gauge);
-        }
+        // Methods beyond the two exercised reciprocal proofs are unsupported
+        // in this fixture model (S07) and resolve false, like the disabled
+        // method-0 control.
         return false;
     }
 }
@@ -263,14 +247,60 @@ contract ConfigurableTrustedValidator {
             return false; // zero factory: rejected
         }
         Policy memory p = _policies[claimedFactory];
-        if (p.module == address(0) || p.method == 0 || p.method > 4) {
-            return false; // no configured policy
+        if (p.module == address(0) || p.method == 0 || p.method > 2) {
+            return false; // no configured policy (S07: menu is the 1/2 arms)
         }
         try IModuleLike(p.module).validateGauge(gauge, claimedFactory, p.method) returns (bool verdict) {
             return verdict;
         } catch {
             return false; // underlying proof fault collapses to false, like the real validator
         }
+    }
+}
+
+/// @title PreAdmissionObservingValidator
+/// @notice Test-only ORDERING witness (S04): while answering the admission
+/// `validateGauge` read, it directly OBSERVES the candidate's listing record
+/// and the core's aggregate liability on the armed core, and returns
+/// canonical true only while both match the armed pre-write expectations
+/// (Unlisted record, `expectedEscrow`). Post-revert snapshot equality alone
+/// does not prove the read preceded the writes; here acceptance is
+/// conditioned on what the read itself saw: a mutant that moves the trust
+/// read after the StoredListing/totalEscrow writes makes the honest call
+/// observe post-write state, return canonical false and revert
+/// UntrustedGauge. Any argument other than the armed gauge reverts, pinning
+/// the exact call argument. Runs inside the core's staticcall frame: it
+/// observes only and writes nothing. Disclosed fixture control, never a
+/// product dependency.
+contract PreAdmissionObservingValidator {
+    error UnexpectedArgument();
+
+    CurveGaugeLister private _core;
+    address private _gauge;
+    uint256 private _expectedEscrow;
+    bool private _armed;
+
+    /// @notice Arm the mid-read observation: the candidate gauge, the core
+    /// to observe, and the totalEscrow value that must still hold AT READ
+    /// TIME (0 before any paid admission; a mutant-visible value is armed by
+    /// the adversarial control cell).
+    function arm(address core_, address gauge_, uint256 expectedEscrow_) external {
+        _core = CurveGaugeLister(core_);
+        _gauge = gauge_;
+        _expectedEscrow = expectedEscrow_;
+        _armed = true;
+    }
+
+    function validateGauge(address gauge) external view returns (bool) {
+        require(_armed, "not armed");
+        if (gauge != _gauge) revert UnexpectedArgument();
+        if (uint8(_core.getListing(gauge).status) != uint8(CurveGaugeLister.Status.Unlisted)) {
+            return false; // a listing write already preceded the trust read
+        }
+        if (_core.totalEscrow() != _expectedEscrow) {
+            return false; // an escrow write already preceded the trust read
+        }
+        return true;
     }
 }
 

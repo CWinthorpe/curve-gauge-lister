@@ -666,8 +666,12 @@ contract AdaptersTest is TestBase {
         kit.caller.deposit(IIncentivePlatform(address(kit.adapter_)), g, e1, HALF + 100);
         assertEq(token.balanceOf(address(kit.caller)), callerBefore, "duplicate guard pulls nothing");
 
-        // New epochs get distinct receipts (nonce-keyed); the nonce makes two
-        // deposits of the SAME tuple differ (unlike Votium's determinism).
+        // New epochs get distinct receipts (nonce-keyed): a repeat of an
+        // already-funded (gauge, scheduledEpoch) key is refused BEFORE any
+        // second pull (the cell above), so recorded tuples are pairwise
+        // distinct by construction and the local ordinal simply separates the
+        // receipt domain across the adapter's own log (S09 — unlike Votium's
+        // tuple-determinism).
         bytes32 r2 = kit.caller.deposit(IIncentivePlatform(address(kit.adapter_)), g, e2, HALF);
         bytes32 r3 = kit.caller.deposit(IIncentivePlatform(address(kit.adapter_)), g, e2 + WEEK, HALF);
         bytes32 r4 = kit.caller.deposit(IIncentivePlatform(address(kit.adapter_)), g, e2 + 2 * WEEK, HALF);
@@ -853,14 +857,17 @@ contract AdaptersTest is TestBase {
     }
 
     function test_Adapter_CompiledAbiSurfaceMatchesAllowlist() public {
-        // review2 finding 5 / review3 finding 1 / review4 finding 1:
-        // explicit compiled-surface allowlist comparison next to the call
-        // probes. The authoritative inventory is the FRESH artifact's
-        // complete methodIdentifiers map — parsed from the artifact JSON,
-        // independent of selector-pattern recognition — which must equal
-        // the intended allowlist as a set in both directions; the deployed
-        // runtime's decoded dispatcher arms are bound to that inventory and
-        // must match the artifact runtime exactly, with no fallback arm.
+        // review2 finding 5 / review3 finding 1 / review4 finding 1, with
+        // the S16 attestation boundary stated precisely: this body compares
+        // the FRESH artifact's complete methodIdentifiers map — parsed from
+        // the artifact JSON, independent of selector-pattern recognition —
+        // against the intended allowlist as a SET in both directions, and
+        // probes ONE junk selector to show no fallback arm executes. It is
+        // a compiled-surface check: it does NOT compare deployed runtime
+        // bytes or walk the dispatcher. The exact runtime/immutables byte
+        // comparison is a DISTINCT release gate (recorded with the
+        // candidate's release evidence package), and no extra callable
+        // surface may be claimed from this test alone.
         string[] memory votiumAllowed = new string[](16);
         votiumAllowed[0] = "crvUSD()";
         votiumAllowed[1] = "votium()";
@@ -911,16 +918,19 @@ contract AdaptersTest is TestBase {
     }
 
     /// @dev Compiled-ABI allowlist comparison (review2 finding 5 → review3
-    /// finding 1 → review4 finding 1). The AUTHORITATIVE function inventory
-    /// is the fresh compiled artifact's complete `methodIdentifiers` map,
-    /// parsed directly from the artifact JSON this very build writes under
-    /// out/ (vm.readFile + JSON cheatcodes). The complete signature-KEY set
-    /// and count is compared against the intended allowlist in BOTH
-    /// directions: every compiled signature must be allowlisted and every
-    /// allowlisted signature must be present. JSON object keys are unique,
-    /// so a compiled signature string cannot repeat. A newly added function
-    /// — whatever selector width or opcode shape its dispatcher arm takes —
-    /// is still an extra artifact signature and fails the comparison.
+    /// finding 1 → review4 finding 1; S16 wording). The AUTHORITATIVE
+    /// function inventory here is the fresh compiled artifact's complete
+    /// `methodIdentifiers` map, parsed directly from the artifact JSON this
+    /// very build writes under out/ (vm.readFile + JSON cheatcodes). The
+    /// complete signature-KEY set and count is compared against the intended
+    /// allowlist in BOTH directions: every compiled signature must be
+    /// allowlisted and every allowlisted signature must be present. JSON
+    /// object keys are unique, so a compiled signature string cannot repeat.
+    /// A newly added function — whatever selector width or opcode shape its
+    /// dispatcher arm takes — is still an extra artifact signature and fails
+    /// the comparison. The single trailing calldata probe only shows that a
+    /// junk-selector call does not execute a payable-less fallback; full
+    /// dispatcher/runtime-byte equality remains the separate release gate.
     function _assertCompiledAbiAllowlist(address target, string memory artifactId, string[] memory signatures)
         internal
     {

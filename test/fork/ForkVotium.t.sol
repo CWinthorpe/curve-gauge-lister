@@ -194,6 +194,9 @@ abstract contract ForkVotiumSpec is ForkFixture {
     /// @dev §7.9 Pure Votium late catch-up in ONE checkpoint at L+4W: four
     /// 2500e18 deposits into the execution-time round 138, four distinct
     /// original scheduled epochs and receipts; Exhausted with no fifth.
+    /// The real venue accepting four same-gauge entries in one live round is
+    /// Votium's own batch behaviour (S21): it is NOT permission for the
+    /// product to alias its two venue roles onto one endpoint.
     function test_Fork_VotiumLateCatchUpPreservesScheduleNotHistoricalRounds() public {
         Trio memory t = _seedStandard(10_000);
         _assertVotiumPins();

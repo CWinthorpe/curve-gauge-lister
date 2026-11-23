@@ -402,6 +402,8 @@ abstract contract ForkVoteMarketSpec is ForkFixture {
         _seat(t2.lister);
         _fundPayer(payer(), 1);
         _approveFee(t2);
+        // S05: explicit final activation before the positive listing.
+        _activatePaidAdmission(t2);
         fvm.prank(payer());
         t2.lister.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID);
         _topUpVm(t2, FIXTURE_ETH_FLOAT);

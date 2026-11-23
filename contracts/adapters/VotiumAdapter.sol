@@ -157,6 +157,10 @@ contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
         // Deterministic in (gauge, scheduledEpoch, amount, round); a zero
         // receipt is unreachable by construction but guarded explicitly.
         receipt = keccak256(abi.encode(gauge, scheduledEpoch, amount, round));
+        // S09: this hash is an opaque adapter-domain identifier. `round`
+        // provenance is the live activeRound() read at THIS chain-1 ingress
+        // call; the value attests the recorded deposit only, never
+        // destination delivery or venue-side acceptance beyond that call.
         if (receipt == bytes32(0)) revert BadReceipt();
         emit VotiumDeposit(gauge, scheduledEpoch, round, amount, receipt);
     }

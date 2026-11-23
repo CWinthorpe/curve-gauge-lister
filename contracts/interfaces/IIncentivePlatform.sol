@@ -14,7 +14,11 @@ interface IIncentivePlatform {
 
     /// @notice Pull EXACTLY amount from the lister and irrevocably fund a
     /// gauge-bound platform deposit/ingress; return a nonzero durable receipt
-    /// identifier.
+    /// identifier. Provenance (S09): a receipt is an opaque adapter-domain
+    /// value attested by the adapter (emitter) that minted it on this chain —
+    /// chain 1 here — via its record getters and its own deposit event. It
+    /// correlates the ingress call; it is not a destination delivery token and
+    /// carries no venue-external meaning.
     /// @dev scheduledEpoch is the original weekly escrow maturity, not an
     /// assertion that a late deposit buys votes retroactively. No arbitrary
     /// recipient/calldata.

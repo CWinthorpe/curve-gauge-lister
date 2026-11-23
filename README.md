@@ -40,6 +40,6 @@ FOUNDRY_PROFILE=fork forge build --offline --sizes
 MAINNET_RPC_URL=https://eth-mainnet.public.blastapi.io scripts/test-fork.sh
 ```
 
-The acceptance plan additionally requires exact ABI/inventory/layout comparisons, an RPC-unreachable offline control, cold/warm fork runs, fail-closed fork preflight, named falsifiers and independent runtime-byte ceiling checks. Use a fresh build output for artifact-reading tests. The fork endpoint can change; the pinned block cannot silently change.
+The acceptance gates (held with the release evidence package) additionally require exact ABI/inventory/layout comparisons against the owner-held manifest, an RPC-unreachable offline control, cold/warm fork runs, fail-closed fork preflight, named falsifiers and independent runtime-byte ceiling checks. The in-tree compiled-ABI allowlist test checks artifact signature keys plus one no-fallback probe only; deployed-byte/immutables equality is its own release gate and is not attested by that test. Use a fresh build output for artifact-reading tests. The fork endpoint can change; the pinned block cannot silently change.
 
 Build policy: Solidity 0.8.30, optimizer 200 runs, no external Solidity dependencies; default EVM Paris, fork EVM Cancun on chain 1. Baseline evidence used Forge 1.7.1. Reverify compiler/tool versions for the release.

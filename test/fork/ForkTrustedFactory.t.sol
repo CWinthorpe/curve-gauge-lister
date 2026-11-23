@@ -148,6 +148,8 @@ abstract contract ForkTrustedFactoryScenarios is ForkFixture {
         _fundPayerOnce(payer());
         fvm.prank(payer());
         IErc20Venue(CRVUSD).approve(address(t.lister), FEE);
+        // S05: explicit final activation once the prerequisites above hold.
+        _activatePaidAdmission(t);
         uint256 payerBefore = IErc20Venue(CRVUSD).balanceOf(payer());
         uint256 nGaugesBefore = uint256(int256(IControllerVenue(CONTROLLER).n_gauges()));
         fvm.recordLogs();
@@ -297,6 +299,8 @@ abstract contract ForkTrustedFactoryScenarios is ForkFixture {
         _fundPayerOnce(payer());
         fvm.prank(payer());
         IErc20Venue(CRVUSD).approve(address(t.lister), FEE);
+        // S05: explicit final activation once the prerequisites above hold.
+        _activatePaidAdmission(t);
         uint256 payerBefore = IErc20Venue(CRVUSD).balanceOf(payer());
         uint256 nGaugesBefore = uint256(int256(IControllerVenue(CONTROLLER).n_gauges()));
         fvm.recordLogs();

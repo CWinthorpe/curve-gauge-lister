@@ -67,6 +67,11 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
     /// @dev Voter addresses excluded from campaigns created by this adapter.
     address[] private _excluded;
 
+    /// @dev S09: `receipt` is an opaque adapter-domain identifier built from
+    /// (gauge, scheduledEpoch, amount, local ordinal); the ordinal is LOCAL
+    /// to this adapter's log on chain 1 and means nothing at the destination.
+    /// Records and their events attest funded L1 ingress only — never L2
+    /// campaign creation, acceptance or delivery.
     struct DepositRecord {
         address gauge;
         uint256 scheduledEpoch;
@@ -203,8 +208,10 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
         // reached the CampaignRemoteManager in this same call.
         if (IERC20Minimal(crvUSD).balanceOf(address(this)) != balBefore) revert PlatformUnderpull();
 
-        // Nonce-keyed so repeated top-ups of one gauge never alias, while a
-        // duplicate (gauge, scheduledEpoch) is rejected before any pull.
+        // Nonce-keyed so receipts from distinct keys never alias across the
+        // log's history (the local ordinal is adapter-domain only, S09),
+        // while a duplicate (gauge, scheduledEpoch) is rejected before any
+        // pull.
         // This concrete duplicate-key rejection is the S21 reason the core
         // forbids a mixed split onto one shared endpoint — one quarter would
         // route two same-key calls here. It is VoteMarket-specific ingress
@@ -263,7 +270,10 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
 
     /// @notice Inspect the recorded funding of one (gauge, scheduledEpoch).
     /// @dev Zero receipt means "never funded" (the core requires funded
-    /// receipts, so a recorded 0 receipt cannot have happened).
+    /// receipts, so a recorded 0 receipt cannot have happened). These
+    /// getters expose recorded L1 ingress only (S09): keyed and chronological
+    /// forms view the SAME adapter-domain record; neither attests destination
+    /// delivery.
     function getDeposit(address gauge, uint256 scheduledEpoch)
         external
         view

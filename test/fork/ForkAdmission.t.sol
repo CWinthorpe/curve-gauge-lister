@@ -25,6 +25,12 @@ abstract contract ForkAdmissionSpec is ForkFixture {
         Trio memory t = _deployTrio(10_000);
         _fundPayer(payer(), 1);
         _approveFee(t);
+        // S05: explicit final activation after the applicable prerequisites
+        // (bindings read back in _deployTrio; funding and approval here). The
+        // deliberate UNSEATED negative case below stays: the admin rejection
+        // must come from the controller check itself, never from the pause
+        // gate masking it.
+        _activatePaidAdmission(t);
 
         uint256 nGaugesBefore = uint256(int256(IControllerVenue(CONTROLLER).n_gauges()));
         assertEq(nGaugesBefore, N_GAUGES_PINNED, "count before");
@@ -108,6 +114,8 @@ abstract contract ForkAdmissionSpec is ForkFixture {
         _seat(t.lister);
         _fundPayer(payer(), 1);
         _approveFee(t);
+        // S05: paid admission enabled only after seating/funding/approval.
+        _activatePaidAdmission(t);
 
         // Baselines captured AFTER funding.
         Snap memory pre = _snap(t);

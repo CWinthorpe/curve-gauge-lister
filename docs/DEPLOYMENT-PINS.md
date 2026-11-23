@@ -28,6 +28,35 @@ The lister owner controls pause, prospective configurations and two-step ownersh
 - `VoteMarketAdapter(crvUSD_,owner_,campaignRemoteManager_,votemarket_)`: local token/CRM need code; verify the nonzero remote on Arbitrum, not by an L1 code lookup.
 - Use an authorized atomic deploy-and-bind batch. Each adapter's actual owner calls `setLister` once after the core exists. Read back both bindings and all pins/config; complete any two-step ownership handoff. Keep admission paused until controller, venue, FD and operational gates are complete. A misbound adapter must be replaced before accepting fees, not rebound later.
 
+## Production controller composition (S03)
+
+Named composition. The core's immutable `controller` is the GaugeController
+`0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB`, and the product consumes exactly
+three behaviours from it: `add_gauge` (immediate permanent, caller-authorized
+registry addition), `gauge_types` (returns the stored type when present —
+including a valid type zero — and reverts when the gauge is absent) and
+`n_gauge_types` (exclusive upper bound for type validation). The positive
+witness of this composition at the frozen regression pin is
+`test/fork/ForkAdmission.t.sol`
+`test_Fork_ControllerSeatingAndUnseatedRollback` — funded pre-seating attempt
+rejected by the REAL controller admin check with complete rollback, DAO-
+executed two-step seating, unauthorized commit/apply rejected, the same
+candidate succeeding once with immediate typed membership at type zero,
+gauge-count advance, exact `add_gauge(gauge, 0, 0)` observation and raw
+NewGauge decode — reinforced by the membership/count/type-zero assertions of
+the two fork trust identities, each constructing the core against the pinned
+target (`_deployTrio` re-asserts `controller()` equals the pin).
+
+What this packet does NOT certify, and what remains the open approval item
+Q01: the approved PRODUCTION caller/role chain that seats this lister for
+`add_gauge` while preserving the DAO's existing routes and the seated-wrapper
+route. The fork's impersonated two-step admin transfer simulates the
+composition only; it is not a GaugeAdder seating receipt, and neither a
+narrow shim, the raw-admin seat nor the empty absence-revert alone supplies
+those properties. Immediate typed membership (including valid type zero) and
+the DAO's existing routes are preserved obligations of any approved
+composition, not inferred from the simulation.
+
 ## Fixed regression-fork anchor
 
 Chain1; block `26401019`; hash `0x55810b079923a14fb97ad548f5024f65530dbc4fb2357a38f41e13b3d27cb6d3`; timestamp `1794512471`.

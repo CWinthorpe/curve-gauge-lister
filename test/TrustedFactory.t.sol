@@ -5,6 +5,7 @@ import {Vm} from "./TestBase.sol";
 import {CurveGaugeLister} from "../contracts/CurveGaugeLister.sol";
 import {TrustedFactoryFixture} from "./TrustedFactoryFixture.sol";
 import {MockERC20} from "../contracts/mocks/MockERC20.sol";
+import {MockPool} from "../contracts/mocks/MockPool.sol";
 import {MockListingController} from "../contracts/mocks/MockListingController.sol";
 import {MockIncentivePlatform} from "../contracts/mocks/MockIncentivePlatform.sol";
 import {
@@ -14,7 +15,8 @@ import {
     GaugeValidationModuleModel,
     TrustedFactoryModel,
     FactoryClaimGauge,
-    PoisonAddController
+    PoisonAddController,
+    PreAdmissionObservingValidator
 } from "./mocks/TrustedFactoryMocks.sol";
 
 /// @title TrustedFactoryTest
@@ -26,6 +28,15 @@ import {
 /// registry precedence, DAO-free-lane independence and admission-only
 /// scoping. Bounty hook/report/claim scaffolding is not inherited; the
 /// original V1 Listing/event and all-FD law is what these witnesses assert.
+/// @dev SCOPE DISTINCTION (S04): these offline identities exercise CORE
+/// BEHAVIOUR (the product's own ordering, error normalization and effect
+/// law) against disclosed fixture models. Selected PINNED CASES (the two
+/// fork identities at fork/TrustedFactory.t.sol) are the only place live
+/// pinned state is observed. Current validator OWNER/MANAGER/POLICY values
+/// are mutable upstream policy — reviewed operationally per
+/// docs/DEPLOYMENT-PINS.md, never certified by a local fixture. Do not read
+/// a fixture-policy cell as a live-policy certificate, or a pinned-case run
+/// as core-behaviour coverage.
 /// @dev Ordering cells follow plan §2.1: within the untrusted-before-effects
 /// identity the healthy false-rejection cell runs first, then the
 /// controller-poison cell BEFORE the transfer-poison cell, so the
@@ -225,14 +236,19 @@ contract TrustedFactoryTest is TrustedFactoryFixture {
         // Negative argument controls: a checker that accepts only a DISTINCT
         // address rejects the product call — the lister passes the gauge and
         // NOTHING else (no pool/LP/factory/caller substitution, no
-        // lister-side `gauge.factory()` call, no legacy fallback).
-        address[4] memory wrongArgs = [c.pool, c.lp, c.factory, payer];
+        // lister-side `gauge.factory()` call, no legacy fallback). Each wrong
+        // argument is built from the ATTEMPTED candidate (S04): the gate
+        // comparator and the call under test share one freshly deployed
+        // world/candidate, so no cell silently compares against a prior
+        // candidate's addresses.
         string[4] memory argNames = ["pool", "lp", "factory", "caller"];
-        for (uint256 i = 0; i < wrongArgs.length; ++i) {
+        for (uint256 i = 0; i < argNames.length; ++i) {
             ConfigurableTrustedValidator vNeg = new ConfigurableTrustedValidator();
             World memory wn = _newWorld(address(vNeg));
             Candidate memory cn = _method1Candidate(vNeg);
-            vNeg.setArgumentGate(true, wrongArgs[i]);
+            address wrongArg = i == 0 ? cn.pool : (i == 1 ? cn.lp : (i == 2 ? cn.factory : payer));
+            assertTrue(wrongArg != cn.gauge, "negative control argument is distinct from the candidate gauge");
+            vNeg.setArgumentGate(true, wrongArg);
             (bool nok, bytes memory nret) = _paidCall(wn, payer, cn);
             _expectRevertedWith(
                 nok,
@@ -442,11 +458,82 @@ contract TrustedFactoryTest is TrustedFactoryFixture {
         );
         _assertSnapUnchanged(s3, _snap(w3, c3.gauge), "TF_BEFORE_TRANSFER: no custody/allowance effects");
 
-        // (d) TF_BEFORE_READINESS: trust precedes paid-adapter readiness.
+        // (d) TF_BEFORE_READINESS: trust precedes paid-adapter binding.
         // A false checker against an UNBOUND positive-share endpoint must
         // still yield exactly UntrustedGauge — never PlatformNotReady —
         // proving the trust read runs before `_requireAdaptersBound`.
         _tf4ReadinessPrecedence();
+
+        // (e) S04: ordering made directly observable from INSIDE the read
+        // (post-revert equality alone does not prove pre-write ordering).
+        _tf4ObservedPreWriteOrdering();
+    }
+
+    /// @dev Registry-authenticated candidate with no factory-policy wiring:
+    // the observing validator witnesses effect ORDERING, not the reciprocal
+    // proof, so the factory claim is never consulted (S04).
+    function _observingCandidate() private returns (Candidate memory c) {
+        c.lp = address(new MockERC20(18));
+        c.pool = address(new MockPool());
+        c.gauge = address(new FactoryClaimGauge(c.lp, address(0xDEAD)));
+        c.factory = address(0xDEAD);
+        c.slot = _nextSlot++ % 10;
+        registry.setPool(c.pool, c.slot, c.lp, _coins2(), 2);
+        registry.setGauge(c.pool, c.slot, 0, c.gauge, int128(0));
+    }
+
+    /// @dev Added matrix cell (S04): a test-only validator OBSERVES the
+    /// candidate's listing record and the core's aggregate liability DURING
+    /// the admission read and accepts only while both match the armed
+    /// pre-write state. Cell 1 arms (Unlisted, escrow 0): the honest call is
+    /// admitted, so the acceptance itself is the mid-read observation of
+    /// pre-write state. Cell 2 arms the opposite expectation (escrow FEE,
+    /// i.e. the writes already happened) against an identical fresh world:
+    /// the read observes the true pre-write state, returns canonical false
+    /// and the call reverts exactly UntrustedGauge. Together the cells make
+    /// the ordering non-vacuous: a mutant moving the trust read after the
+    /// StoredListing/totalEscrow writes flips which cell passes.
+    function _tf4ObservedPreWriteOrdering() private {
+        PreAdmissionObservingValidator obs = new PreAdmissionObservingValidator();
+        MockListingController ctl = new MockListingController(controllerDao, int128(2));
+        MockIncentivePlatform pv = new MockIncentivePlatform(address(crvUSD));
+        MockIncentivePlatform pm = new MockIncentivePlatform(address(crvUSD));
+        CurveGaugeLister core_ = _deployCore(address(ctl), address(pv), address(pm), address(obs));
+        _bindAndUnpause(core_, ctl, address(pv), address(pm));
+        Candidate memory c = _observingCandidate();
+        obs.arm(address(core_), c.gauge, 0);
+        crvUSD.mint(payer, FEE_AMOUNT);
+        World memory w = World({core_: core_, ctl: ctl, pv: pv, pm: pm});
+        (bool ok, bytes memory ret) = _paidCall(w, payer, c);
+        _expectSucceeded(ok, ret, "TF_OBSERVED_PRE_WRITE_ORDERING: read itself saw Unlisted/zero-liability state");
+        assertEq(
+            uint256(core_.getListing(c.gauge).status), 1, "TF_OBSERVED_PRE_WRITE_ORDERING: admitted record is Active"
+        );
+        assertEq(core_.totalEscrow(), FEE_AMOUNT, "TF_OBSERVED_PRE_WRITE_ORDERING: liability moved only after the read");
+
+        PreAdmissionObservingValidator obs2 = new PreAdmissionObservingValidator();
+        MockListingController ctl2 = new MockListingController(controllerDao, int128(2));
+        MockIncentivePlatform pv2 = new MockIncentivePlatform(address(crvUSD));
+        MockIncentivePlatform pm2 = new MockIncentivePlatform(address(crvUSD));
+        CurveGaugeLister core2 = _deployCore(address(ctl2), address(pv2), address(pm2), address(obs2));
+        _bindAndUnpause(core2, ctl2, address(pv2), address(pm2));
+        Candidate memory c2 = _observingCandidate();
+        // Arm the POST-WRITE expectation: the honest product must fail here;
+        // only a mutant that writes before reading would pass.
+        obs2.arm(address(core2), c2.gauge, FEE_AMOUNT);
+        crvUSD.mint(payer, FEE_AMOUNT);
+        World memory w2 = World({core_: core2, ctl: ctl2, pv: pv2, pm: pm2});
+        (bool nok, bytes memory nret) = _paidCall(w2, payer, c2);
+        _expectRevertedWith(
+            nok,
+            nret,
+            _wantUntrusted(c2.gauge),
+            "TF_OBSERVED_PRE_WRITE_ORDERING: pre-write observation rejects the post-write arming"
+        );
+        assertEq(
+            uint256(core2.getListing(c2.gauge).status), 0, "TF_OBSERVED_PRE_WRITE_ORDERING: control left no record"
+        );
+        assertEq(core2.totalEscrow(), 0, "TF_OBSERVED_PRE_WRITE_ORDERING: control left liability untouched");
     }
 
     /// @dev Added matrix cell: unbound AND misbound positive-share endpoints
