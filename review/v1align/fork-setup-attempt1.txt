@@ -1,8 +1,0 @@
-Initial fork collector setup attempt: process proc_711a85cf9c82, exit 1, before any RPC or fork test.
-
-Traceback (most recent call last):
-  File "/home/winny/curve-gauge-lister/review/v1align/collect_fork.py", line 17, in <module>
-    assert solc.is_dir(), "Installed solc directory absent; do not install or fake fork acceptance"
-AssertionError: Installed solc directory absent; do not install or fake fork acceptance
-
-The initial collector assumed /home/winny/.svm/0.8.30. Discovery showed that directory absent and the installed compiler at /home/winny/.local/share/svm/0.8.30/solc-0.8.30. The collector was corrected to copy this installed compiler into isolated XDG_DATA_HOME, with fresh HOME and XDG_CACHE_HOME. This was a collector setup failure, not a fork test failure or a waived acceptance gate.

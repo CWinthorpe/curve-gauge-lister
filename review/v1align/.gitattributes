@@ -1,4 +1,0 @@
-# Preserve native compiler stdout byte-for-byte, including caret-padding spaces
-# and final blank lines. This exception applies only to these evidence logs.
-build-default.txt -whitespace
-build-fork.txt -whitespace
