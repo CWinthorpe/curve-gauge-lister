@@ -366,7 +366,6 @@ abstract contract ForkFixture is TestBase {
 
     event log_named_address(string key, address val);
     event log_named_uint(string key, uint256 val);
-    event log_named_bytes32(string key, bytes32 val);
     event log_named_bool(string key, bool val);
 
     // ------------------------------------------------------------------
