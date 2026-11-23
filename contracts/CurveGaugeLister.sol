@@ -74,8 +74,13 @@ contract CurveGaugeLister {
 
     /// @notice Seconds in one Curve week (Thursday 00:00 UTC boundaries).
     uint256 public constant WEEK = CurveWeek.WEEK;
-    /// @notice Exact paid admission fee in crvUSD base units.
-    uint256 public constant FEE = 10_000e18;
+    /// @notice Exact paid admission fee in crvUSD base units: the fixed
+    /// tranche identity (CX-CONSTANTS) — exactly `QUARTER * EPOCHS`, so the
+    /// fee cannot silently drift from the drip schedule. Value, getter,
+    /// layout and every reserve transition are unchanged; the literal
+    /// economics (10,000e18 total, 2,500e18 per tranche, four tranches) keep
+    /// their independent witnesses in the offline suite.
+    uint256 public constant FEE = QUARTER * EPOCHS;
     /// @notice Gross tranche released per matured epoch.
     uint256 public constant QUARTER = 2_500e18;
     /// @notice Number of drip epochs.
@@ -416,13 +421,10 @@ contract CurveGaugeLister {
         // adapter binding.
         _requireAdaptersBound(plat);
 
-        StoredListing storage rec = _listings[gauge];
-        rec.pool = pool;
-        rec.lpToken = lpToken;
+        StoredListing storage rec = _writeAdmittedRecord(gauge, pool, lpToken, derivedType, cfg);
+        // Paid-lane-specific assignments stay here (CX-ADMIT): the actual
+        // payer, Active status, and the frozen platform snapshot.
         rec.payer = msg.sender;
-        rec.admissionRegistry = cfg.registry;
-        rec.gaugeType = derivedType;
-        rec.listingEpoch = epochStart(block.timestamp);
         rec.status = Status.Active;
         rec.votium = plat.votium;
         rec.voteMarket = plat.voteMarket;
@@ -433,8 +435,7 @@ contract CurveGaugeLister {
         SafeToken.safeTransferFrom(crvUSD, msg.sender, address(this), FEE);
         if (IERC20Minimal(crvUSD).balanceOf(address(this)) != balBefore + FEE) revert FeeDeltaMismatch();
 
-        IListingController(controller).add_gauge(gauge, derivedType, INITIAL_WEIGHT);
-        if (IListingController(controller).gauge_types(gauge) != derivedType) revert MembershipFailed();
+        _seatMembership(gauge, derivedType, INITIAL_WEIGHT);
 
         emit GaugeListed(gauge, pool, msg.sender, derivedType, rec.listingEpoch, FEE, false);
     }
@@ -457,16 +458,14 @@ contract CurveGaugeLister {
         AdmissionConfig memory cfg = _admissionConfig;
         (address lpToken, int128 derivedType) = _admit(pool, gauge, gaugeIndex, handlerId, cfg);
 
-        StoredListing storage rec = _listings[gauge];
-        rec.pool = pool;
-        rec.lpToken = lpToken;
-        rec.admissionRegistry = cfg.registry;
-        rec.gaugeType = derivedType;
-        rec.listingEpoch = epochStart(block.timestamp);
+        StoredListing storage rec = _writeAdmittedRecord(gauge, pool, lpToken, derivedType, cfg);
+        // DAO-lane-specific assignment stays here (CX-ADMIT): DaoExempt
+        // status. The zero payer and the zero monetary/platform snapshot are
+        // the fresh record's defaults — this lane stamps no fee, escrow or
+        // venue endpoints.
         rec.status = Status.DaoExempt;
 
-        IListingController(controller).add_gauge(gauge, derivedType, initialWeight);
-        if (IListingController(controller).gauge_types(gauge) != derivedType) revert MembershipFailed();
+        _seatMembership(gauge, derivedType, initialWeight);
 
         emit GaugeListed(gauge, pool, address(0), derivedType, rec.listingEpoch, 0, true);
     }
@@ -495,12 +494,21 @@ contract CurveGaugeLister {
         uint256 due = _maturedUnpaid(rec.listingEpoch, rec.epochsReleased);
 
         for (uint256 i = 0; i < due; ++i) {
-            // Step 4 (A2.3): iteration zero reuses the authoritative initial
-            // flag observation made above (only local epoch arithmetic ran in
-            // between); every later tranche rereads immediately before its
-            // outbound calls. True observed after an earlier quarter in the
-            // transaction confiscates the remainder and stops the loop; a
-            // read failure rolls back the entire checkpoint.
+            // Step 4 (A2.3): the kill-observation unit is the QUARTER, not
+            // the leg (CX-QUARTER). Iteration zero reuses the authoritative
+            // initial flag observation made above (only local epoch
+            // arithmetic ran in between — the initial read covers tranche
+            // one because nothing observable happened since); every later
+            // tranche rereads immediately before its outbound calls because
+            // a kill may have landed after the earlier tranche funded.
+            // Within one quarter the two positive-share legs commit as a
+            // unit: `_settleMaturedQuarter`/`_routeQuarter` perform no
+            // flag read between the legs, so a flag change observed at all
+            // is observed at the NEXT quarter boundary. True observed after
+            // an earlier quarter in the transaction confiscates the
+            // remainder and stops the loop; a read failure rolls back the
+            // entire checkpoint. Neither one read per call nor per-leg
+            // reads are equivalent.
             if (i != 0 && _gaugeKilled(gauge)) {
                 confiscatedNow = _confiscate(gauge);
                 break;
@@ -514,8 +522,10 @@ contract CurveGaugeLister {
     /// event/status order: bump the funded counter and reserve, route the
     /// matured tranche's split using the record's frozen snapshot, emit the
     /// quarter release with the post-effect Active-only remainder, then move
-    /// to Exhausted at four funded quarters. Called only from the `checkpoint`
-    /// loop, which owns the kill-observation boundaries; the whole call keeps
+    /// to Exhausted at four funded quarters. The quarter's two venue legs
+    /// commit as one unit — the kill flag is observed per quarter, never
+    /// per leg (CX-QUARTER). Called only from the `checkpoint` loop, which
+    /// owns the quarter-boundary observation points; the whole call keeps
     /// all-due atomicity under the outer lock.
     function _settleMaturedQuarter(address gauge, StoredListing storage rec) private {
         uint256 scheduledEpoch = rec.listingEpoch + (uint256(rec.epochsReleased) + 1) * WEEK;
@@ -791,6 +801,40 @@ contract CurveGaugeLister {
         // LP token cannot use the native sentinel: enforced by its code check.
     }
 
+    /// @dev Shared admitted-record assignments for both listing lanes
+    /// (CX-ADMIT): exactly the five identical writes (pool, authenticated LP
+    /// token, provenance registry, derived type, floored listing epoch) of a
+    /// freshly admitted record. The admission gates are NOT merged here: the
+    /// owner/pause checks stay in the respective entry points, structural
+    /// checks run inside `_admit` before the paid lane's trust read, and all
+    /// lane-specific fields stay at the call sites.
+    function _writeAdmittedRecord(
+        address gauge,
+        address pool,
+        address lpToken,
+        int128 derivedType,
+        AdmissionConfig memory cfg
+    ) private returns (StoredListing storage rec) {
+        rec = _listings[gauge];
+        rec.pool = pool;
+        rec.lpToken = lpToken;
+        rec.admissionRegistry = cfg.registry;
+        rec.gaugeType = derivedType;
+        rec.listingEpoch = epochStart(block.timestamp);
+    }
+
+    /// @dev Shared immediate typed-membership work for both listing lanes
+    /// (CX-ADMIT): the caller-authorized `add_gauge` with this lane's
+    /// initial weight (paid: `INITIAL_WEIGHT` zero; DAO: owner-supplied),
+    /// then the SAME-transaction membership postcheck that is the health
+    /// proof. Weight values stay lane-specific per plan law; the postcheck
+    /// is identical, and a failed or mismatched membership reverts the whole
+    /// call — no lane gate is hoisted ahead of `_admit` here.
+    function _seatMembership(address gauge, int128 derivedType, uint256 initialWeight) private {
+        IListingController(controller).add_gauge(gauge, derivedType, initialWeight);
+        if (IListingController(controller).gauge_types(gauge) != derivedType) revert MembershipFailed();
+    }
+
     /// @dev One computed split of one gross QUARTER (S11): Votium takes the
     /// basis-point floor, VoteMarket the remainder. The same amounts are the
     /// single source of truth for which destinations are read or called —
@@ -822,12 +866,26 @@ contract CurveGaugeLister {
         bytes32 receipt = IIncentivePlatform(platform).deposit(gauge, scheduledEpoch, amount);
         if (receipt == bytes32(0)) revert PlatformReceiptMissing(platform);
         uint256 balAfter = IERC20Minimal(crvUSD).balanceOf(address(this));
-        // Directional exact-delta check: test the delta direction before
-        // subtracting so an opposite-direction observation surfaces through
-        // the named error instead of an arithmetic Panic.
-        if (balAfter > balBefore || balBefore - balAfter != amount) revert PlatformDeltaMismatch(platform);
+        // Directional exact-delta check (CX-ADAPTER): direction first via
+        // the shared outbound-delta predicate, then the exact debit amount,
+        // so an opposite-direction observation surfaces through the named
+        // error instead of an arithmetic Panic.
+        if (!_exactOutboundDelta(balBefore, balAfter, amount)) revert PlatformDeltaMismatch(platform);
         SafeToken.forceApprove(crvUSD, platform, 0);
         emit PlatformDeposit(gauge, platform, scheduledEpoch, epochStart(block.timestamp), amount, receipt);
+    }
+
+    /// @dev Shared direction-first outbound-delta predicate for the two
+    /// core debit checks (CX-ADAPTER, used by `_fundPlatform` and
+    /// `_confiscate`): an observation moving the balance UP fails before any
+    /// subtraction, and only an exact `-amount` delta passes. It is
+    /// deliberately NOT equated to the inbound-credit comparison (which
+    /// stays in addition form at the FeeDistributor boundary) nor to a
+    /// baseline-equality check; each custody boundary keeps its own exact,
+    /// named comparison and its own error.
+    function _exactOutboundDelta(uint256 before_, uint256 after_, uint256 amount) private pure returns (bool) {
+        if (after_ > before_) return false;
+        return before_ - after_ == amount;
     }
 
     /// @dev Plan §6 + auditfix001 §3 confiscation routine, shared by
@@ -866,22 +924,31 @@ contract CurveGaugeLister {
         if (t > block.timestamp) revert DistributorUnusable();
         if (block.timestamp - epochStart(t) > FD_ACCOUNTING_HORIZON_WEEKS * WEEK) revert DistributorUnusable();
 
-        // Step 3: effects before token interaction.
-        amount = _remaining(rec);
+        // Step 3: effects before token interaction. The exact confiscatable
+        // remainder is derived from the funded-quarter count directly,
+        // independent of the status filter used by the public display
+        // (CX-AMOUNT): both callers gate on Active before entering `_confiscate`,
+        // so this equals the Active-only `_remaining` observation here while
+        // the custody amount no longer routes through the display's status
+        // predicate. Status/liability order is unchanged, the terminal no-op
+        // guards stay at the call sites, and the public Active-only
+        // `remaining` display is untouched.
+        amount = FEE - _releasedAmount(rec.epochsReleased);
         uint256 receiptWeek = epochStart(block.timestamp);
         rec.status = Status.Confiscated;
         totalEscrow -= amount;
 
         // Step 4: exact direct transfer with two-sided delta verification.
-        // Each side checks the delta direction before subtracting (an
+        // The debit side uses the shared direction-first predicate (an
         // opposite-direction observation must surface through the named
         // error, never an arithmetic Panic); the credit side stays in
-        // addition form.
+        // addition form — the two boundaries are deliberately not equated
+        // (CX-ADAPTER).
         uint256 listerBefore = IERC20Minimal(crvUSD).balanceOf(address(this));
         uint256 fdBefore = IERC20Minimal(crvUSD).balanceOf(fd);
         SafeToken.safeTransfer(crvUSD, fd, amount);
         uint256 listerAfter = IERC20Minimal(crvUSD).balanceOf(address(this));
-        if (listerAfter > listerBefore || listerBefore - listerAfter != amount) {
+        if (!_exactOutboundDelta(listerBefore, listerAfter, amount)) {
             revert ConfiscationDeltaMismatch();
         }
         uint256 fdAfter = IERC20Minimal(crvUSD).balanceOf(fd);
@@ -900,6 +967,13 @@ contract CurveGaugeLister {
         }
 
         // Step 6: custody and accounting-success events, in this order.
+        // `EscrowConfiscated` is the completion signal for escrow
+        // accounting (CX-MAINT): it commits only after exact custody and
+        // both mandatory postchecks. The accompanying
+        // `FeeCheckpointResult(true)` is retained compatibility telemetry on
+        // the confiscation path — the same event name carries the separate,
+        // weaker best-effort maintenance meaning when the standalone
+        // `checkpointFees()` wrapper emits it (see `_tryCheckpointToken`).
         emit EscrowConfiscated(gauge, fd, amount, receiptWeek);
         emit FeeCheckpointResult(true);
     }
