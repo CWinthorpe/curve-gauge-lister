@@ -1,8 +1,6 @@
 # Intel: YB → Votium/VoteMarket on-chain funding (operator pointer, msg 2026-11-12)
 
-Source of truth for real bribe-platform ingestion. Verified 2026-11-12:
-Sourcify exact_match (chainId 1) for all three; live storage reads via
-https://ethereum-rpc.publicnode.com.
+Historical venue-integration research, not the current deployment or product specification. The observations below were recorded on 2026-11-12 using Sourcify and https://ethereum-rpc.publicnode.com; they are not fresh v1align verification. Current authority is OPERATIONS.md, ABI.md and DEPLOYMENT-PINS.md, together with the candidate's compiled source. In particular, the current Votium receipt is keccak256(abi.encode(gauge, scheduledEpoch, amount, round)); both adapters use exact bounded approvals and clear them, with no standing-approval exception. The old implications below are retained as research history, not permission to change those rules.
 
 ## Contracts
 - DepositPlatformDivider `0x0997f89c451124eadf00f87de77924d77a38419a` (MIT)
