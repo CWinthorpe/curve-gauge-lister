@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {Vm} from "../TestBase.sol";
-import {BountyFixture} from "../bounty/BountyFixture.sol";
-import {CurveGaugeListerV2} from "../../contracts/CurveGaugeListerV2.sol";
-import {ICurveGaugeListerV2} from "../../contracts/interfaces/ICurveGaugeListerV2.sol";
-import {MockERC20} from "../../contracts/mocks/MockERC20.sol";
-import {MockPool} from "../../contracts/mocks/MockPool.sol";
-import {MockGauge} from "../../contracts/mocks/MockGauge.sol";
-import {MockListingController} from "../../contracts/mocks/MockListingController.sol";
-import {MockIncentivePlatform} from "../../contracts/mocks/MockIncentivePlatform.sol";
-import {MockBountyHook} from "../bounty/mocks/MockBountyHook.sol";
+import {Vm} from "./TestBase.sol";
+import {CurveGaugeLister} from "../contracts/CurveGaugeLister.sol";
+import {TrustedFactoryFixture} from "./TrustedFactoryFixture.sol";
+import {MockERC20} from "../contracts/mocks/MockERC20.sol";
+import {MockListingController} from "../contracts/mocks/MockListingController.sol";
+import {MockIncentivePlatform} from "../contracts/mocks/MockIncentivePlatform.sol";
 import {
     AlwaysTrueTrustedValidator,
     NoSelectorValidator,
@@ -18,301 +14,32 @@ import {
     GaugeValidationModuleModel,
     TrustedFactoryModel,
     FactoryClaimGauge,
-    LegacyLpToken,
     PoisonAddController
-} from "../mocks/TrustedFactoryMocks.sol";
+} from "./mocks/TrustedFactoryMocks.sol";
 
 /// @title TrustedFactoryTest
-/// @notice The eight default-lane trust witnesses
-/// (plans/TRUSTEDFACTORY-PLAN.md §5.1): constructor parameterization, exact
-/// target argument, legacy/non-factory policy, untrusted-before-effects
-/// ordering, read-fault fail-closed normalization, registry precedence,
-/// DAO-free-lane independence and admission-only scoping.
-/// @dev DISCLOSURES:
-///  * The validator/module/factory fixtures in TrustedFactoryMocks.sol are a
-///    LOCAL POLICY MODEL of the pinned GaugeValidator/GaugeValidationModuleV1
-///    reciprocal-proof semantics — a disclosed fixture, NOT the deployed
-///    validator. Live factory policy semantics are certified by the two fork
-///    identities (fork/TrustedFactory.t.sol), not by these mocks alone.
-///  * Fault injection (revert/short/oversized/noncanonical returns, code
-///    removal, poisoned effects) is disclosed fixture control, never a
-///    mock-only happy path.
-///  * Ordering cells follow plan §5.2: within the untrusted-before-effects
-///    identity the healthy false-rejection cell runs first, then the
-///    controller-poison cell BEFORE the transfer-poison cell, so the
-///    after-add_gauge mutant fails at TF_BEFORE_ADD_GAUGE while the
-///    after-fee mutant still passes that cell and later fails at
-///    TF_BEFORE_TRANSFER. Named assertions wrap low-level call results
-///    (unexpected reverts fail AT the named label, not at unlabelled setup),
-///    and every rejection cell compares complete PRE-STATE snapshots — never
-///    only zeros. Staticcall mocks maintain no call counters; argument
-///    identity is pinned by exact-calldata revert gates and error identity.
-contract TrustedFactoryTest is BountyFixture {
-    uint256 internal constant FEE_AMOUNT = 10_000e18;
-    uint256 internal constant QUARTER_AMOUNT = 2_500e18;
-
-    bytes32 internal constant T_GAUGE_LISTED =
-        keccak256("GaugeListed(address,address,address,int128,uint256,uint256,bool)");
-    bytes32 internal constant T_QUARTER_RELEASED = keccak256("QuarterReleased(address,uint256,uint256,uint256)");
-    bytes32 internal constant T_ESCROW_CONFISCATED =
-        keccak256("EscrowConfiscated(address,address,bytes32,uint256,uint256,uint256,uint256)");
-
-    struct Candidate {
-        address pool;
-        address gauge;
-        address lp;
-        address factory;
-        uint256 slot;
-    }
-
-    struct World {
-        CurveGaugeListerV2 core_;
-        MockListingController ctl;
-        MockIncentivePlatform pv;
-        MockIncentivePlatform pm;
-        MockBountyHook hk;
-    }
-
-    struct Receipt {
-        uint256 amount;
-        uint256 executionEpoch;
-        bytes32 receipt;
-    }
-
-    /// @dev The complete observable snapshot surface of plan §5.1: the whole
-    /// public ListingV2, totalEscrow, payer/core/FD/bounty-stand-in/venue
-    /// balances, payer-to-core and core-to-endpoint allowances, controller
-    /// membership/type/count/weight and venue receipt state touched by the
-    /// fixture. Compared to PRE-STATE, never only to zero.
-    struct Snap {
-        address pool;
-        address lpToken;
-        address payerAddr;
-        address admissionRegistry;
-        int128 gaugeType;
-        uint256 listingEpoch;
-        uint8 status;
-        uint8 epochsReleased;
-        uint256 deposited;
-        uint256 released;
-        uint256 remaining;
-        uint256 confiscated;
-        uint256 reporterReward;
-        uint256 fdConfiscated;
-        bytes32 rewardReportId;
-        address votium;
-        address voteMarket;
-        uint16 votiumBps;
-        uint256 totalEscrow;
-        uint256 balPayer;
-        uint256 balCore;
-        uint256 balFd;
-        uint256 balVotium;
-        uint256 balVoteMarket;
-        uint256 balHook;
-        uint256 allowPayerCore;
-        uint256 allowCoreVotium;
-        uint256 allowCoreVm;
-        uint256 allowCoreHook;
-        bool ctlMember;
-        int128 ctlType;
-        uint256 ctlWeight;
-        uint256 ctlTimeWeight;
-        int128 ctlNTypes;
-        uint256 pvDeposits;
-        uint256 pmDeposits;
-        Receipt pvR1;
-        Receipt pvR2;
-        Receipt pmR1;
-        Receipt pmR2;
-        uint256 hookCreditCalls;
-    }
-
+/// @notice The eight no-bounty trust identities, ported with their names
+/// unchanged from the retired V2 suite onto the amended V1 core
+/// (plans/V1ALIGN-PLAN.md §4; V1ALIGN-WITNESSES.md §2): constructor
+/// parameterization, exact target argument, legacy/non-factory policy,
+/// untrusted-before-effects ordering, read-fault fail-closed normalization,
+/// registry precedence, DAO-free-lane independence and admission-only
+/// scoping. Bounty hook/report/claim scaffolding is not inherited; the
+/// original V1 Listing/event and all-FD law is what these witnesses assert.
+/// @dev Ordering cells follow plan §2.1: within the untrusted-before-effects
+/// identity the healthy false-rejection cell runs first, then the
+/// controller-poison cell BEFORE the transfer-poison cell, so the
+/// after-add_gauge mutant fails at TF_BEFORE_ADD_GAUGE while the after-fee
+/// mutant still passes that cell and later fails at TF_BEFORE_TRANSFER.
+/// Named assertions wrap low-level call results (unexpected reverts fail AT
+/// the named label, not at unlabelled setup), and every rejection cell
+/// compares complete PRE-STATE snapshots — never only zeros. Staticcall
+/// mocks maintain no call counters; argument identity is pinned by
+/// exact-calldata revert gates and error identity.
+contract TrustedFactoryTest is TrustedFactoryFixture {
     function setUp() public {
-        vm.chainId(1);
-        setupBountyWorld();
+        setupTrustedWorld();
         crvUSD.mint(payer, FEE_AMOUNT * 24);
-    }
-
-    // ---------------------------------------------------------------
-    // fixture helpers
-    // ---------------------------------------------------------------
-
-    function _newWorld(address validator_) internal returns (World memory w) {
-        return _newWorldWithController(validator_, new MockListingController(controllerDao, int128(2)));
-    }
-
-    function _newWorldWithController(address validator_, MockListingController ctl) internal returns (World memory w) {
-        w.ctl = ctl;
-        w.pv = new MockIncentivePlatform(address(crvUSD));
-        w.pm = new MockIncentivePlatform(address(crvUSD));
-        w.hk = new MockBountyHook(address(crvUSD), address(fd));
-        w.core_ = deployV2CoreWithValidator(address(ctl), address(w.pv), address(w.pm), address(w.hk), validator_);
-        bindAndUnpause(w.core_, ctl, address(w.pv), address(w.pm), w.hk);
-    }
-
-    function _coins2() internal returns (address[8] memory c) {
-        c[0] = address(new MockERC20(18));
-        c[1] = address(new MockERC20(18));
-    }
-
-    /// @dev Registry-authenticated pool/gauge from a configured trusted
-    /// factory with the method-1 (DIRECT_LP) reciprocal match. Pool, LP,
-    /// gauge and factory are pairwise distinct so an argument mutant cannot
-    /// pass by collision.
-    function _method1Candidate(ConfigurableTrustedValidator v) internal returns (Candidate memory c) {
-        TrustedFactoryModel f = new TrustedFactoryModel();
-        GaugeValidationModuleModel m = new GaugeValidationModuleModel();
-        v.setPolicy(address(f), address(m), 1);
-        c.factory = address(f);
-        c.lp = address(new MockERC20(18));
-        c.pool = address(new MockPool());
-        c.gauge = address(new FactoryClaimGauge(c.lp, c.factory));
-        f.setGauge(c.lp, c.gauge);
-        c.slot = _nextSlot++ % 10;
-        registry.setPool(c.pool, c.slot, c.lp, _coins2(), 2);
-        registry.setGauge(c.pool, c.slot, 0, c.gauge, int128(0));
-    }
-
-    /// @dev Distinct-LP legacy model: method 2, direct lookup ZERO, then
-    /// lp.minter() -> pool -> factory.get_gauge(pool) == gauge.
-    function _legacyCandidate(ConfigurableTrustedValidator v) internal returns (Candidate memory c) {
-        TrustedFactoryModel f = new TrustedFactoryModel();
-        GaugeValidationModuleModel m = new GaugeValidationModuleModel();
-        v.setPolicy(address(f), address(m), 2);
-        c.factory = address(f);
-        c.pool = address(new MockPool());
-        c.lp = address(new LegacyLpToken(c.pool));
-        c.gauge = address(new FactoryClaimGauge(c.lp, c.factory));
-        f.setGauge(c.pool, c.gauge); // reverse proof through the minter route
-        c.slot = _nextSlot++ % 10;
-        registry.setPool(c.pool, c.slot, c.lp, _coins2(), 2);
-        registry.setGauge(c.pool, c.slot, 0, c.gauge, int128(0));
-    }
-
-    /// @dev Registry-authenticated pool/gauge whose gauge is a plain
-    /// non-factory MockGauge: it self-asserts nothing (no factory() function
-    /// at all) and no policy exists for it.
-    function _plainCandidate() internal returns (Candidate memory c) {
-        c.lp = address(new MockERC20(18));
-        c.pool = address(new MockPool());
-        c.gauge = address(new MockGauge(c.lp));
-        c.factory = address(0);
-        c.slot = _nextSlot++ % 10;
-        registry.setPool(c.pool, c.slot, c.lp, _coins2(), 2);
-        registry.setGauge(c.pool, c.slot, 0, c.gauge, int128(0));
-    }
-
-    function _paidCall(World memory w, address from, Candidate memory c) internal returns (bool ok, bytes memory ret) {
-        vm.prank(from);
-        (ok, ret) =
-            address(w.core_).call(abi.encodeCall(CurveGaugeListerV2.listGauge, (c.pool, c.gauge, uint256(0), c.slot)));
-    }
-
-    function _freeCall(World memory w, address from, Candidate memory c, uint256 initialWeight)
-        internal
-        returns (bool ok, bytes memory ret)
-    {
-        vm.prank(from);
-        (ok, ret) = address(w.core_)
-            .call(
-                abi.encodeCall(
-                    CurveGaugeListerV2.listGaugeNoEscrow, (c.pool, c.gauge, uint256(0), c.slot, initialWeight)
-                )
-            );
-    }
-
-    function _wantUntrusted(address gauge) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(CurveGaugeListerV2.UntrustedGauge.selector, gauge);
-    }
-
-    function _wantCheckFailed(address gauge) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(CurveGaugeListerV2.TrustedGaugeCheckFailed.selector, gauge);
-    }
-
-    function _wantE(bytes4 selector) internal pure returns (bytes memory) {
-        return abi.encodeWithSelector(selector);
-    }
-
-    function _expectRevertedWith(bool ok, bytes memory ret, bytes memory want, string memory name) private pure {
-        require(!ok, string.concat(name, ": expected revert with the named error, call succeeded"));
-        bytesEq(ret, want, name);
-    }
-
-    function _expectSucceeded(bool ok, bytes memory ret, string memory name) private pure {
-        require(ok, string.concat(name, ": unexpected revert, data ", _hex(ret)));
-    }
-
-    function _hex(bytes memory data) private pure returns (string memory) {
-        bytes16 hexd = "0123456789abcdef";
-        bytes memory out = new bytes(data.length * 2);
-        for (uint256 i = 0; i < data.length; ++i) {
-            uint8 b = uint8(data[i]);
-            out[i * 2] = hexd[b >> 4];
-            out[i * 2 + 1] = hexd[b & 0x0F];
-        }
-        return string(out);
-    }
-
-    function _snap(World memory w, address gauge) private view returns (Snap memory s) {
-        ICurveGaugeListerV2.ListingV2 memory rec = w.core_.getListing(gauge);
-        s.pool = rec.pool;
-        s.lpToken = rec.lpToken;
-        s.payerAddr = rec.payer;
-        s.admissionRegistry = rec.admissionRegistry;
-        s.gaugeType = rec.gaugeType;
-        s.listingEpoch = rec.listingEpoch;
-        s.status = rec.status;
-        s.epochsReleased = rec.epochsReleased;
-        s.deposited = rec.deposited;
-        s.released = rec.released;
-        s.remaining = rec.remaining;
-        s.confiscated = rec.confiscated;
-        s.reporterReward = rec.reporterReward;
-        s.fdConfiscated = rec.fdConfiscated;
-        s.rewardReportId = rec.rewardReportId;
-        s.votium = rec.votium;
-        s.voteMarket = rec.voteMarket;
-        s.votiumBps = rec.votiumBps;
-        s.totalEscrow = w.core_.totalEscrow();
-        s.balPayer = crvUSD.balanceOf(payer);
-        s.balCore = crvUSD.balanceOf(address(w.core_));
-        s.balFd = crvUSD.balanceOf(address(fd));
-        s.balVotium = crvUSD.balanceOf(address(w.pv));
-        s.balVoteMarket = crvUSD.balanceOf(address(w.pm));
-        s.balHook = crvUSD.balanceOf(address(w.hk));
-        s.allowPayerCore = crvUSD.allowance(payer, address(w.core_));
-        s.allowCoreVotium = crvUSD.allowance(address(w.core_), address(w.pv));
-        s.allowCoreVm = crvUSD.allowance(address(w.core_), address(w.pm));
-        s.allowCoreHook = crvUSD.allowance(address(w.core_), address(w.hk));
-        try w.ctl.gauge_types(gauge) returns (int128 t) {
-            s.ctlMember = true;
-            s.ctlType = t;
-        } catch {
-            s.ctlMember = false;
-            s.ctlType = -99999;
-        }
-        s.ctlWeight = w.ctl.get_gauge_weight(gauge);
-        s.ctlTimeWeight = w.ctl.time_weight(gauge);
-        s.ctlNTypes = w.ctl.n_gauge_types();
-        uint256 e0 = (block.timestamp / WEEK) * WEEK;
-        (s.pvR1.amount, s.pvR1.executionEpoch, s.pvR1.receipt) = w.pv.getDeposit(gauge, e0 + WEEK);
-        (s.pvR2.amount, s.pvR2.executionEpoch, s.pvR2.receipt) = w.pv.getDeposit(gauge, e0 + 2 * WEEK);
-        (s.pmR1.amount, s.pmR1.executionEpoch, s.pmR1.receipt) = w.pm.getDeposit(gauge, e0 + WEEK);
-        (s.pmR2.amount, s.pmR2.executionEpoch, s.pmR2.receipt) = w.pm.getDeposit(gauge, e0 + 2 * WEEK);
-        s.pvDeposits = w.pv.depositCount();
-        s.pmDeposits = w.pm.depositCount();
-        s.hookCreditCalls = w.hk.creditCalls();
-    }
-
-    function _assertSnapUnchanged(Snap memory beforeState, Snap memory afterState, string memory name) private pure {
-        bytes32 a = keccak256(abi.encode(beforeState));
-        bytes32 b = keccak256(abi.encode(afterState));
-        assertEq(a, b, name);
-    }
-
-    function _expectLog(Vm.Log[] memory logs, address emitter, bytes32 topic0, string memory name) private pure {
-        assertTrue(hasEventFrom(logs, emitter, topic0), name);
     }
 
     // ---------------------------------------------------------------
@@ -322,31 +49,29 @@ contract TrustedFactoryTest is BountyFixture {
     function test_TF_ConstructorPinAndGuards() public {
         // TF_CHAIN_FIRST: a non-1 chain fails WrongChain FIRST, even with
         // arguments that violate later guards too (zero validator, EOA
-        // validator).
-        bytes memory wantWrongChain = _wantE(CurveGaugeListerV2.WrongChain.selector);
+        // validator). Seven arguments; no bounty argument/config/binding.
+        bytes memory wantWrongChain = _wantE(CurveGaugeLister.WrongChain.selector);
         vm.chainId(31337);
-        try new CurveGaugeListerV2(
+        try new CurveGaugeLister(
             daoOwner,
             address(crvUSD),
             address(controller),
             address(fd),
-            CurveGaugeListerV2.AdmissionConfig(address(registry), 8),
-            CurveGaugeListerV2.PlatformConfig(address(votium), address(voteMarket), 5000),
-            address(hook),
+            CurveGaugeLister.AdmissionConfig(address(registry), 8),
+            CurveGaugeLister.PlatformConfig(address(votium), address(voteMarket), 5000),
             address(0)
         ) {
             assertTrue(false, "TF_CHAIN_FIRST: wrong-chain construction must revert");
         } catch (bytes memory rd) {
             bytesEq(rd, wantWrongChain, "TF_CHAIN_FIRST: WrongChain precedes every later guard");
         }
-        try new CurveGaugeListerV2(
+        try new CurveGaugeLister(
             daoOwner,
             address(crvUSD),
             address(controller),
             address(fd),
-            CurveGaugeListerV2.AdmissionConfig(address(registry), 8),
-            CurveGaugeListerV2.PlatformConfig(address(votium), address(voteMarket), 5000),
-            address(hook),
+            CurveGaugeLister.AdmissionConfig(address(registry), 8),
+            CurveGaugeLister.PlatformConfig(address(votium), address(voteMarket), 5000),
             actor("eoaValidator")
         ) {
             assertTrue(false, "TF_CHAIN_FIRST: wrong-chain EOA validator must revert");
@@ -357,40 +82,38 @@ contract TrustedFactoryTest is BountyFixture {
 
         // TF_PIN_NO_CODE: chain 1 with a zero validator fails exact
         // NoCode(address(0)); an EOA (no-code) input fails NoCode(validator).
-        try new CurveGaugeListerV2(
+        try new CurveGaugeLister(
             daoOwner,
             address(crvUSD),
             address(controller),
             address(fd),
-            CurveGaugeListerV2.AdmissionConfig(address(registry), 8),
-            CurveGaugeListerV2.PlatformConfig(address(votium), address(voteMarket), 5000),
-            address(hook),
+            CurveGaugeLister.AdmissionConfig(address(registry), 8),
+            CurveGaugeLister.PlatformConfig(address(votium), address(voteMarket), 5000),
             address(0)
         ) {
             assertTrue(false, "TF_PIN_NO_CODE: zero validator must be rejected");
         } catch (bytes memory rd) {
             bytesEq(
                 rd,
-                abi.encodeWithSelector(CurveGaugeListerV2.NoCode.selector, address(0)),
+                abi.encodeWithSelector(CurveGaugeLister.NoCode.selector, address(0)),
                 "TF_PIN_NO_CODE: exact NoCode(address(0))"
             );
         }
         address eoaValidator = actor("eoaValidator");
-        try new CurveGaugeListerV2(
+        try new CurveGaugeLister(
             daoOwner,
             address(crvUSD),
             address(controller),
             address(fd),
-            CurveGaugeListerV2.AdmissionConfig(address(registry), 8),
-            CurveGaugeListerV2.PlatformConfig(address(votium), address(voteMarket), 5000),
-            address(hook),
+            CurveGaugeLister.AdmissionConfig(address(registry), 8),
+            CurveGaugeLister.PlatformConfig(address(votium), address(voteMarket), 5000),
             eoaValidator
         ) {
             assertTrue(false, "TF_PIN_NO_CODE: EOA validator must be rejected");
         } catch (bytes memory rd) {
             bytesEq(
                 rd,
-                abi.encodeWithSelector(CurveGaugeListerV2.NoCode.selector, eoaValidator),
+                abi.encodeWithSelector(CurveGaugeLister.NoCode.selector, eoaValidator),
                 "TF_PIN_NO_CODE: code presence guard covers EOA inputs"
             );
         }
@@ -398,22 +121,28 @@ contract TrustedFactoryTest is BountyFixture {
         // TF_PIN_EXACT: a code-bearing supplied checker is retained EXACTLY
         // and readable through the immutable getter; paused start preserved.
         ConfigurableTrustedValidator kept = new ConfigurableTrustedValidator();
-        CurveGaugeListerV2 coreA = deployV2CoreWithValidator(
-            address(controller), address(votium), address(voteMarket), address(hook), address(kept)
-        );
+        CurveGaugeLister coreA = _deployCore(address(controller), address(votium), address(voteMarket), address(kept));
         assertEq(coreA.trustedGaugeValidator(), address(kept), "TF_PIN_EXACT: supplied checker retained exactly");
-        assertTrue(coreA.paused(), "TF_PIN_EXACT: V2 still starts paused");
+        assertTrue(coreA.paused(), "TF_PIN_EXACT: fresh core starts paused");
 
         // TF_PIN_PARAMETERIZED: two DIFFERENT code-bearing checkers each land
         // on their own core — the pin is a constructor parameter, not a
         // hidden hardcoded address.
         AlwaysTrueTrustedValidator alt = new AlwaysTrueTrustedValidator();
-        CurveGaugeListerV2 coreB = deployV2CoreWithValidator(
-            address(controller), address(votium), address(voteMarket), address(hook), address(alt)
-        );
+        CurveGaugeLister coreB = _deployCore(address(controller), address(votium), address(voteMarket), address(alt));
         assertTrue(address(kept) != address(alt), "TF_PIN_PARAMETERIZED: distinct checkers");
         assertEq(coreB.trustedGaugeValidator(), address(alt), "TF_PIN_PARAMETERIZED: second pin honored");
         assertEq(coreA.trustedGaugeValidator(), address(kept), "TF_PIN_PARAMETERIZED: first pin unchanged");
+
+        // TF_NO_CONSTRUCTOR_CHECK: a code-bearing checker whose validateGauge
+        // unconditionally REVERTS still permits construction — there is no
+        // candidate at construction time and no constructor validation read.
+        ConfigurableTrustedValidator screaming = new ConfigurableTrustedValidator();
+        screaming.setTopFault(ConfigurableTrustedValidator.TopFault.Revert);
+        CurveGaugeLister coreC =
+            _deployCore(address(controller), address(votium), address(voteMarket), address(screaming));
+        assertEq(coreC.trustedGaugeValidator(), address(screaming), "TF_NO_CONSTRUCTOR_CHECK: reverting checker pinned");
+        assertTrue(coreC.paused(), "TF_NO_CONSTRUCTOR_CHECK: construction succeeded paused");
     }
 
     // ---------------------------------------------------------------
@@ -431,23 +160,22 @@ contract TrustedFactoryTest is BountyFixture {
         uint256 payerBefore = crvUSD.balanceOf(payer);
         vm.recordLogs();
         (bool ok, bytes memory ret) = _paidCall(w, payer, c);
-        // TF_EXACT_GAUGE_ARGUMENT first, per plan §5.2 argument-identity rule:
-        // this cell fails if the intended predicate is replaced by the
+        // TF_EXACT_GAUGE_ARGUMENT first, per the matrix argument-identity
+        // rule: this cell fails if the intended predicate is replaced by the
         // incidental proposal selector (no such function on the checker ->
         // read fault) or by any other argument.
         _expectSucceeded(ok, ret, "TF_EXACT_GAUGE_ARGUMENT: only the exact gauge is accepted and admitted");
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        // C1 closure (review/TRUSTEDFACTORY-CONF.md §1): the expected epoch
-        // is computed INDEPENDENTLY of the returned record — the record's
-        // listingEpoch and the emitted epoch are both checked against THIS
-        // value, never against each other.
+        // The expected epoch is computed INDEPENDENTLY of the returned
+        // record — the record's listingEpoch and the emitted epoch are both
+        // checked against THIS value, never against each other.
         uint256 expectedEpoch = (block.timestamp / WEEK) * WEEK;
 
-        // TF_TRUSTED_PAID_ACTIVE: full Active listing, controller type and
-        // zero raw weight.
-        ICurveGaugeListerV2.ListingV2 memory rec = w.core_.getListing(c.gauge);
-        assertEq(uint256(rec.status), uint256(CurveGaugeListerV2.Status.Active), "TF_TRUSTED_PAID_ACTIVE: Active");
+        // TF_TRUSTED_PAID_ACTIVE: full original 15-field Active listing,
+        // controller type and zero raw weight.
+        CurveGaugeLister.Listing memory rec = w.core_.getListing(c.gauge);
+        assertEq(uint256(rec.status), uint256(CurveGaugeLister.Status.Active), "TF_TRUSTED_PAID_ACTIVE: Active");
         assertEq(rec.pool, c.pool, "TF_TRUSTED_PAID_ACTIVE: pool");
         assertEq(rec.lpToken, c.lp, "TF_TRUSTED_PAID_ACTIVE: lp");
         assertEq(rec.payer, payer, "TF_TRUSTED_PAID_ACTIVE: payer");
@@ -458,14 +186,10 @@ contract TrustedFactoryTest is BountyFixture {
         assertEq(rec.remaining, FEE_AMOUNT, "TF_TRUSTED_PAID_ACTIVE: remaining");
         assertEq(rec.released, 0, "TF_TRUSTED_PAID_ACTIVE: released");
         assertEq(rec.confiscated, 0, "TF_TRUSTED_PAID_ACTIVE: confiscated");
-        assertEq(rec.reporterReward, 0, "TF_TRUSTED_PAID_ACTIVE: reporterReward");
-        assertEq(rec.fdConfiscated, 0, "TF_TRUSTED_PAID_ACTIVE: fdConfiscated");
-        assertEq(rec.rewardReportId, bytes32(0), "TF_TRUSTED_PAID_ACTIVE: rewardReportId");
-        // C1 closure: the paid record must carry the CONFIGURED venues and
-        // split (BountyFixture PlatformConfig: votium=w.pv, voteMarket=w.pm,
-        // votiumBps=5000), and the independently expected epoch. Deleting the
-        // `rec.votium = plat.votium` assignment at
-        // contracts/CurveGaugeListerV2.sol:408 must fail HERE.
+        // The paid record must carry the CONFIGURED venues and split
+        // (PlatformConfig: votium=w.pv, voteMarket=w.pm, votiumBps=5000),
+        // and the independently expected epoch. Deleting the
+        // `rec.votium = plat.votium` assignment must fail HERE.
         assertEq(rec.votium, address(w.pv), "TF_TRUSTED_PAID_ACTIVE: votium is the configured venue");
         assertEq(rec.voteMarket, address(w.pm), "TF_TRUSTED_PAID_ACTIVE: voteMarket is the configured venue");
         assertEq(uint256(rec.votiumBps), 5000, "TF_TRUSTED_PAID_ACTIVE: votiumBps is the configured split");
@@ -544,7 +268,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectSucceeded(ok, ret, "TF_LEGACY_DISTINCT_LP: minter-route admission");
         assertEq(
             uint256(w.core_.getListing(c.gauge).status),
-            uint256(CurveGaugeListerV2.Status.Active),
+            uint256(CurveGaugeLister.Status.Active),
             "TF_LEGACY_DISTINCT_LP: Active record"
         );
 
@@ -636,8 +360,9 @@ contract TrustedFactoryTest is BountyFixture {
     // ---------------------------------------------------------------
 
     function test_TF_UntrustedPaidAdmissionBeforeEffects() public {
-        // Cell order per plan §5.2: healthy false-rejection FIRST, then the
-        // controller-poison cell BEFORE the transfer-poison cell.
+        // Cell order per the matrix: healthy false-rejection FIRST, then the
+        // controller-poison cell BEFORE the transfer-poison cell, then the
+        // readiness precedence cell. No hook prerequisite exists here.
 
         // (a) healthy false rejection + full snapshot equality.
         ConfigurableTrustedValidator v = new ConfigurableTrustedValidator();
@@ -651,30 +376,39 @@ contract TrustedFactoryTest is BountyFixture {
         v.setRejectAll(true);
         assertEq(w.pv.lister(), address(w.core_), "reachable: votium seated");
         assertEq(w.pm.lister(), address(w.core_), "reachable: votemarket seated");
-        assertEq(w.hk.lister(), address(w.core_), "reachable: bounty bound");
         assertTrue(crvUSD.balanceOf(payer) >= FEE_AMOUNT, "reachable: payer funded");
         assertEq(crvUSD.allowance(payer, address(w.core_)), type(uint256).max, "reachable: payer approved");
         assertEq(uint256(w.core_.getListing(c.gauge).status), 0, "reachable: gauge unused");
 
         Snap memory s0 = _snap(w, c.gauge);
+        vm.recordLogs();
         (bool ok, bytes memory ret) = _paidCall(w, payer, c);
+        Vm.Log[] memory logsA = vm.getRecordedLogs();
         // TF_FALSE_REJECTS first: canonical false yields EXACTLY
         // UntrustedGauge(gauge).
         _expectRevertedWith(ok, ret, _wantUntrusted(c.gauge), "TF_FALSE_REJECTS: canonical false exact error");
         // TF_NO_CUSTODY_OR_LISTING: complete pre-state snapshot unchanged.
         _assertSnapUnchanged(s0, _snap(w, c.gauge), "TF_NO_CUSTODY_OR_LISTING: full snapshot unchanged");
+        _expectNoLog(logsA, address(w.core_), T_GAUGE_LISTED, "TF_NO_CUSTODY_OR_LISTING: no persisted listing event");
 
         // Owner-paid calls are NOT exempt. The owner is explicitly funded
         // and approved so the ONLY reason the call can fail is the trust
         // guard itself (otherwise a mutant that moves the trust read after
         // the fee pull would die on the money precondition instead of the
-        // poison cells that carry the ordering proof, plan §5.2).
+        // poison cells that carry the ordering proof). The snapshot is
+        // ACTOR-SPECIFIC (owner rows, not the ordinary payer's).
         crvUSD.mint(daoOwner, FEE_AMOUNT);
         vm.prank(daoOwner);
         crvUSD.approve(address(w.core_), FEE_AMOUNT);
+        Snap memory sOwner = _snapActor(w, c.gauge, daoOwner);
+        vm.recordLogs();
         (bool ook, bytes memory oret) = _paidCall(w, daoOwner, c);
+        Vm.Log[] memory logsO = vm.getRecordedLogs();
         _expectRevertedWith(ook, oret, _wantUntrusted(c.gauge), "TF_OWNER_PAID_NOT_EXEMPT: owner pays the same law");
-        _assertSnapUnchanged(s0, _snap(w, c.gauge), "TF_OWNER_PAID_NOT_EXEMPT: owner attempt changed nothing");
+        _assertSnapUnchanged(
+            sOwner, _snapActor(w, c.gauge, daoOwner), "TF_OWNER_PAID_NOT_EXEMPT: owner attempt changed nothing"
+        );
+        _expectNoLog(logsO, address(w.core_), T_GAUGE_LISTED, "TF_OWNER_PAID_NOT_EXEMPT: no persisted listing event");
 
         // (b) INDEPENDENT controller poison: an otherwise honest controller
         // whose add_gauge reverts with its own distinct sentinel. On the
@@ -707,6 +441,73 @@ contract TrustedFactoryTest is BountyFixture {
             tok, tret, _wantUntrusted(c3.gauge), "TF_BEFORE_TRANSFER: trust error precedes the poisoned transferFrom"
         );
         _assertSnapUnchanged(s3, _snap(w3, c3.gauge), "TF_BEFORE_TRANSFER: no custody/allowance effects");
+
+        // (d) TF_BEFORE_READINESS: trust precedes paid-adapter readiness.
+        // A false checker against an UNBOUND positive-share endpoint must
+        // still yield exactly UntrustedGauge — never PlatformNotReady —
+        // proving the trust read runs before `_requirePlatformsReady`.
+        _tf4ReadinessPrecedence();
+    }
+
+    /// @dev Added matrix cell: unbound AND misbound positive-share endpoints
+    /// under a false checker; both keep the exact UntrustedGauge precedence.
+    /// Split into two private cells to keep the frozen (no-viaIR) stack depth.
+    function _tf4ReadinessPrecedence() private {
+        _tf4UnboundReadiness();
+        _tf4MisboundReadiness();
+    }
+
+    function _tf4UnboundReadiness() private {
+        // Variant 1: fresh never-bound positive-share venues.
+        ConfigurableTrustedValidator v = new ConfigurableTrustedValidator();
+        MockListingController ctl = new MockListingController(controllerDao, int128(2));
+        MockIncentivePlatform pv = new MockIncentivePlatform(address(crvUSD));
+        MockIncentivePlatform pm = new MockIncentivePlatform(address(crvUSD));
+        CurveGaugeLister core = _deployCore(address(ctl), address(pv), address(pm), address(v));
+        // Seat the controller and fund/approve the payer, but NEVER bind the
+        // venues: readiness would revert PlatformNotReady if reached.
+        vm.prank(controllerDao);
+        ctl.setLister(address(core));
+        vm.prank(daoOwner);
+        core.setPaused(false);
+        vm.startPrank(payer);
+        crvUSD.approve(address(core), type(uint256).max);
+        vm.stopPrank();
+        Candidate memory c = _method1Candidate(v);
+        v.setRejectAll(true);
+        World memory w = World({core_: core, ctl: ctl, pv: pv, pm: pm});
+        _assertBeforeReadiness(w, c);
+    }
+
+    function _tf4MisboundReadiness() private {
+        // Variant 2: venues bound to a DECOY lister (misbound readiness
+        // fault) with the same false checker.
+        ConfigurableTrustedValidator v = new ConfigurableTrustedValidator();
+        MockListingController ctl = new MockListingController(controllerDao, int128(2));
+        MockIncentivePlatform pv2 = new MockIncentivePlatform(address(crvUSD));
+        MockIncentivePlatform pm2 = new MockIncentivePlatform(address(crvUSD));
+        CurveGaugeLister core2 = _deployCore(address(ctl), address(pv2), address(pm2), address(v));
+        CurveGaugeLister decoy = _deployCore(address(ctl), address(pv2), address(pm2), address(v));
+        // pv2/pm2 point at the decoy core, never at core2.
+        pv2.setLister(address(decoy));
+        pm2.setLister(address(decoy));
+        vm.prank(controllerDao);
+        ctl.setLister(address(core2));
+        vm.prank(daoOwner);
+        core2.setPaused(false);
+        Candidate memory c2 = _method1Candidate(v);
+        v.setRejectAll(true);
+        World memory w2 = World({core_: core2, ctl: ctl, pv: pv2, pm: pm2});
+        _assertBeforeReadiness(w2, c2);
+    }
+
+    function _assertBeforeReadiness(World memory w, Candidate memory c) private {
+        Snap memory s = _snap(w, c.gauge);
+        (bool ok, bytes memory ret) = _paidCall(w, payer, c);
+        _expectRevertedWith(
+            ok, ret, _wantUntrusted(c.gauge), "TF_BEFORE_READINESS: false checker beats unbound/misbound venues"
+        );
+        _assertSnapUnchanged(s, _snap(w, c.gauge), "TF_BEFORE_READINESS: readiness-fault cell changed nothing");
     }
 
     // ---------------------------------------------------------------
@@ -809,7 +610,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectSucceeded(hok, hret, "TF_READ_FAULT_REJECTS: canonical true control still admits");
         assertEq(
             uint256(wh.core_.getListing(ch.gauge).status),
-            uint256(CurveGaugeListerV2.Status.Active),
+            uint256(CurveGaugeLister.Status.Active),
             "control: canonical true Active"
         );
     }
@@ -839,7 +640,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectRevertedWith(
             ok1,
             ret1,
-            _wantE(CurveGaugeListerV2.PoolNotRegistered.selector),
+            _wantE(CurveGaugeLister.PoolNotRegistered.selector),
             "TF_REGISTRY_FIRST: registry authentication precedes the trust read"
         );
 
@@ -853,7 +654,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectRevertedWith(
             ok3,
             ret3,
-            _wantE(CurveGaugeListerV2.GaugeMismatch.selector),
+            _wantE(CurveGaugeLister.GaugeMismatch.selector),
             "TF_ASSOCIATION_FIRST: reverse gauge association precedes the trust read"
         );
 
@@ -865,7 +666,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectRevertedWith(
             ok4,
             ret4,
-            _wantE(CurveGaugeListerV2.BadLpToken.selector),
+            _wantE(CurveGaugeLister.BadLpToken.selector),
             "TF_ASSOCIATION_FIRST: LP association precedes the trust read"
         );
     }
@@ -875,23 +676,23 @@ contract TrustedFactoryTest is BountyFixture {
         // precede the trust read (this is NOT a trust-first rewrite).
         Candidate memory c5 = _method1Candidate(v);
         vm.prank(payer);
-        (bool ok5, bytes memory ret5) = address(w.core_)
-            .call(abi.encodeCall(CurveGaugeListerV2.listGauge, (c5.pool, c5.gauge, uint256(10), c5.slot)));
+        (bool ok5, bytes memory ret5) =
+            address(w.core_).call(abi.encodeCall(CurveGaugeLister.listGauge, (c5.pool, c5.gauge, uint256(10), c5.slot)));
         _expectRevertedWith(
             ok5,
             ret5,
-            _wantE(CurveGaugeListerV2.IndexOutOfRange.selector),
+            _wantE(CurveGaugeLister.IndexOutOfRange.selector),
             "TF_REGISTRY_FIRST: index bounds precede the trust read"
         );
 
         Candidate memory c6 = _method1Candidate(v);
         vm.prank(payer);
         (bool ok6, bytes memory ret6) = address(w.core_)
-            .call(abi.encodeCall(CurveGaugeListerV2.listGauge, (c6.pool, actor("codelessGauge"), uint256(0), c6.slot)));
+            .call(abi.encodeCall(CurveGaugeLister.listGauge, (c6.pool, actor("codelessGauge"), uint256(0), c6.slot)));
         _expectRevertedWith(
             ok6,
             ret6,
-            abi.encodeWithSelector(CurveGaugeListerV2.NoCode.selector, actor("codelessGauge")),
+            abi.encodeWithSelector(CurveGaugeLister.NoCode.selector, actor("codelessGauge")),
             "TF_REGISTRY_FIRST: structural code checks precede the trust read"
         );
     }
@@ -907,7 +708,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectRevertedWith(
             okP,
             retP,
-            _wantE(CurveGaugeListerV2.ListingsPaused.selector),
+            _wantE(CurveGaugeLister.ListingsPaused.selector),
             "TF_REGISTRY_FIRST: pause precedes the trust read"
         );
 
@@ -923,7 +724,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectRevertedWith(
             dok2,
             dret2,
-            abi.encodeWithSelector(CurveGaugeListerV2.AlreadyListed.selector, cd.gauge),
+            abi.encodeWithSelector(CurveGaugeLister.AlreadyListed.selector, cd.gauge),
             "TF_REGISTRY_FIRST: duplicate protection precedes the trust read"
         );
     }
@@ -974,9 +775,9 @@ contract TrustedFactoryTest is BountyFixture {
     }
 
     /// @dev One successful free-lane admission cell: first-call success is
-    /// asserted BEFORE record/custody assertions (plan §5.2 free-identity
-    /// rule), then the complete DaoExempt expectations via _assertFreeListing.
-    /// Returns the admitted gauge for caller-specific extra checks.
+    /// asserted BEFORE record/custody assertions, then the complete DaoExempt
+    /// expectations via _assertFreeListing. Returns the admitted gauge for
+    /// caller-specific extra checks.
     function _tf7FreeCell(World memory w, uint256 initialWeight, string memory successLabel)
         private
         returns (address gauge)
@@ -997,31 +798,27 @@ contract TrustedFactoryTest is BountyFixture {
         _tf7FreeCell(wp, 5, "TF_DAO_NO_CHECKER_DEPENDENCE: paused free lane succeeds");
     }
 
-    /// @dev Without bounty/platform readiness: the controller is seated
+    /// @dev Without platform readiness: the controller is seated
     /// (add_gauge authority is the product's OWN requirement, not a paid
-    /// readiness gate) while the two venues and the bounty hook are NEVER
-    /// bound and the core is still paused. `paid-adapter/bounty readiness`
-    /// belongs to the paid lane only.
+    /// readiness gate) while the two venues are NEVER bound and the core is
+    /// still paused. Paid-adapter readiness belongs to the paid lane only.
     function _tf7UnboundAndNoReadiness() private {
         ConfigurableTrustedValidator vu = new ConfigurableTrustedValidator();
         vu.setTopFault(ConfigurableTrustedValidator.TopFault.Revert);
         MockListingController ctlU = new MockListingController(controllerDao, int128(2));
         MockIncentivePlatform pvU = new MockIncentivePlatform(address(crvUSD));
         MockIncentivePlatform pmU = new MockIncentivePlatform(address(crvUSD));
-        MockBountyHook hkU = new MockBountyHook(address(crvUSD), address(fd));
-        CurveGaugeListerV2 coreU =
-            deployV2CoreWithValidator(address(ctlU), address(pvU), address(pmU), address(hkU), address(vu));
+        CurveGaugeLister coreU = _deployCore(address(ctlU), address(pvU), address(pmU), address(vu));
         vm.prank(controllerDao);
-        ctlU.setLister(address(coreU)); // controller authority only; no venue/bounty binding
-        World memory wu = World({core_: coreU, ctl: ctlU, pv: pvU, pm: pmU, hk: hkU});
-        // C1 closure: the unready/paused cell asserts its FULL expectations —
-        // supplied weight, membership, complete DaoExempt tuple, event and
-        // zero custody — not just call success and status.
-        address gaugeU =
-            _tf7FreeCell(wu, 3, "TF_DAO_NO_CHECKER_DEPENDENCE: bounty/platform-unready paused lane succeeds");
+        ctlU.setLister(address(coreU)); // controller authority only; no venue binding, stays paused
+        World memory wu = World({core_: coreU, ctl: ctlU, pv: pvU, pm: pmU});
+        // The unready/paused cell asserts its FULL expectations — supplied
+        // weight, membership, complete original 15-field DaoExempt tuple,
+        // event and zero custody — not just call success and status.
+        address gaugeU = _tf7FreeCell(wu, 3, "TF_DAO_NO_CHECKER_DEPENDENCE: platform-unready paused lane succeeds");
         assertEq(
             uint256(coreU.getListing(gaugeU).status),
-            uint256(CurveGaugeListerV2.Status.DaoExempt),
+            uint256(CurveGaugeLister.Status.DaoExempt),
             "TF_DAO_NO_FACTORY_ALLOWED: DaoExempt with no readiness and no checker dependence"
         );
     }
@@ -1034,7 +831,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectRevertedWith(
             okS,
             retS,
-            _wantE(CurveGaugeListerV2.NotOwner.selector),
+            _wantE(CurveGaugeLister.NotOwner.selector),
             "TF_DAO_AUTH_AND_REGISTRY_RETAINED: outsider still NotOwner"
         );
         Candidate memory cb = _plainCandidate();
@@ -1043,7 +840,7 @@ contract TrustedFactoryTest is BountyFixture {
         _expectRevertedWith(
             okB,
             retB,
-            _wantE(CurveGaugeListerV2.PoolNotRegistered.selector),
+            _wantE(CurveGaugeLister.PoolNotRegistered.selector),
             "TF_DAO_AUTH_AND_REGISTRY_RETAINED: bad registry still rejected on the free lane"
         );
     }
@@ -1061,11 +858,12 @@ contract TrustedFactoryTest is BountyFixture {
         private
     {
         // TF_DAO_NO_FACTORY_ALLOWED: otherwise-valid non-factory gauges are
-        // admitted on the free lane with the exact DaoExempt record.
-        ICurveGaugeListerV2.ListingV2 memory rec = w.core_.getListing(c.gauge);
+        // admitted on the free lane with the exact original 15-field
+        // DaoExempt record.
+        CurveGaugeLister.Listing memory rec = w.core_.getListing(c.gauge);
         assertEq(
             uint256(rec.status),
-            uint256(CurveGaugeListerV2.Status.DaoExempt),
+            uint256(CurveGaugeLister.Status.DaoExempt),
             "TF_DAO_NO_FACTORY_ALLOWED: exact DaoExempt record"
         );
         assertEq(rec.pool, c.pool, "TF_DAO_NO_FACTORY_ALLOWED: pool");
@@ -1080,10 +878,9 @@ contract TrustedFactoryTest is BountyFixture {
         assertEq(
             w.ctl.get_gauge_weight(c.gauge), initialWeight, "TF_DAO_NO_FACTORY_ALLOWED: supplied initialWeight stamped"
         );
-        // C1 closure: the COMPLETE DaoExempt tuple is load-bearing — every
-        // field the reviewer enumerated (review/TRUSTEDFACTORY-CONF.md §1)
-        // beyond the pre-amendment subset. The free lane stamps no escrow,
-        // no release/confiscation, no report identity and no venue snapshot.
+        // The COMPLETE original 15-field DaoExempt tuple is load-bearing:
+        // the free lane stamps no escrow, no release/confiscation and no
+        // venue snapshot.
         assertEq(
             rec.listingEpoch,
             (block.timestamp / WEEK) * WEEK,
@@ -1091,23 +888,18 @@ contract TrustedFactoryTest is BountyFixture {
         );
         assertEq(uint256(rec.epochsReleased), 0, "TF_DAO_NO_FACTORY_ALLOWED: epochsReleased zero");
         assertEq(rec.confiscated, 0, "TF_DAO_NO_FACTORY_ALLOWED: confiscated zero");
-        assertEq(rec.reporterReward, 0, "TF_DAO_NO_FACTORY_ALLOWED: reporterReward zero");
-        assertEq(rec.fdConfiscated, 0, "TF_DAO_NO_FACTORY_ALLOWED: fdConfiscated zero");
-        assertEq(rec.rewardReportId, bytes32(0), "TF_DAO_NO_FACTORY_ALLOWED: rewardReportId zero");
         assertEq(rec.votium, address(0), "TF_DAO_NO_FACTORY_ALLOWED: free lane stamps no votium venue");
         assertEq(rec.voteMarket, address(0), "TF_DAO_NO_FACTORY_ALLOWED: free lane stamps no voteMarket venue");
         assertEq(uint256(rec.votiumBps), 0, "TF_DAO_NO_FACTORY_ALLOWED: free lane stamps no votiumBps");
-        // TF_DAO_ZERO_CUSTODY: zero fee/escrow/bounty.
+        // TF_DAO_ZERO_CUSTODY: zero fee/escrow.
         assertEq(crvUSD.balanceOf(address(w.core_)), 0, "TF_DAO_ZERO_CUSTODY: core holds no fee");
-        assertEq(crvUSD.balanceOf(address(w.hk)), 0, "TF_DAO_ZERO_CUSTODY: bounty saw nothing");
         assertEq(crvUSD.balanceOf(address(fd)), 0, "TF_DAO_ZERO_CUSTODY: FD saw nothing");
         assertEq(w.core_.totalEscrow(), 0, "TF_DAO_ZERO_CUSTODY: totalEscrow zero");
-        assertEq(w.hk.creditCalls(), 0, "TF_DAO_ZERO_CUSTODY: no bounty credit");
 
-        // C1 closure: the free lane MUST emit the complete GaugeListed
-        // payload — payer topic zero, fee zero, daoExempt true, independently
-        // expected epoch. Removing the free-lane emit at
-        // contracts/CurveGaugeListerV2.sol:454 must fail HERE.
+        // The free lane MUST emit the complete original free GaugeListed
+        // payload — payer topic zero, fee zero, daoExempt true,
+        // independently expected epoch. Removing the free-lane emit must
+        // fail HERE (F-TF-FREE-EVENT).
         _expectLog(logs, address(w.core_), T_GAUGE_LISTED, "TF_DAO_NO_FACTORY_ALLOWED: free-lane GaugeListed emitted");
         bool freeListed;
         for (uint256 i = 0; i < logs.length; ++i) {
@@ -1149,14 +941,17 @@ contract TrustedFactoryTest is BountyFixture {
         _tf8DripGate(v, w, a.gauge);
         Candidate memory d = _tf8KillViaCheckpoint(v, w);
         Candidate memory e = _tf8KillViaConfiscate(v, w);
-        _tf8ClaimPath(v, w);
         _tf8TerminalNoOp(v, w, e.gauge);
+        // Added matrix cells (no bounty stand-ins): the admitted record's
+        // views and the standalone fee maintenance call never read the
+        // checker, under the same reverting policy.
+        _tf8ViewGate(v, w, a.gauge);
+        _tf8FeeGate(v, w);
         assertTrue(d.gauge != address(0), "TF_NO_RETROACTIVE_KILL_GATE: checkpoint cell ran");
     }
 
     /// @dev Revocation (false) and checker outage (fault) each block NEW
-    /// paid candidates (plan §5.1: "revoke/fault checker; new paid candidate
-    /// fails").
+    /// paid candidates ("revoke/fault checker; new paid candidate fails").
     function _tf8RecheckEachNewPaid(ConfigurableTrustedValidator v, World memory w) private {
         Candidate memory b = _method1Candidate(v);
         (bool bok, bytes memory bret) = _paidCall(w, payer, b);
@@ -1171,13 +966,13 @@ contract TrustedFactoryTest is BountyFixture {
     function _tf8DripGate(ConfigurableTrustedValidator, World memory w, address gauge) private {
         // TF_NO_RETROACTIVE_DRIP_GATE: the already-admitted gauge (checker
         // still REVERTING) releases its exact due tranche. Call success is
-        // asserted at the named label BEFORE the effect checks (§5.2).
+        // asserted at the named label BEFORE the effect checks.
         vm.warp(block.timestamp + WEEK);
         uint256 coreBefore = crvUSD.balanceOf(address(w.core_));
         vm.recordLogs();
         vm.prank(stranger);
         (bool drop, bytes memory dret) =
-            address(w.core_).call(abi.encodeWithSelector(CurveGaugeListerV2.checkpoint.selector, gauge));
+            address(w.core_).call(abi.encodeWithSelector(CurveGaugeLister.checkpoint.selector, gauge));
         _expectSucceeded(
             drop, dret, "TF_NO_RETROACTIVE_DRIP_GATE: settlement of an admitted gauge performs no trust read"
         );
@@ -1187,7 +982,7 @@ contract TrustedFactoryTest is BountyFixture {
         assertEq(confiscatedNow, 0, "TF_NO_RETROACTIVE_DRIP_GATE: no seizure without a kill flag");
         assertEq(
             uint256(w.core_.getListing(gauge).status),
-            uint256(CurveGaugeListerV2.Status.Active),
+            uint256(CurveGaugeLister.Status.Active),
             "TF_NO_RETROACTIVE_DRIP_GATE: still Active after release"
         );
         assertEq(
@@ -1207,7 +1002,7 @@ contract TrustedFactoryTest is BountyFixture {
     {
         // Fresh cell: admit D healthy, then REVOKE + kill; checkpoint settles
         // the killed remainder through the checkpoint route with the
-        // unchanged bounty/FD law (no new trust condition).
+        // unchanged all-FD V1 law (no new trust condition).
         _fdSpace();
         v.setTopFault(ConfigurableTrustedValidator.TopFault.None);
         d = _method1Candidate(v);
@@ -1219,7 +1014,7 @@ contract TrustedFactoryTest is BountyFixture {
         vm.recordLogs();
         vm.prank(stranger);
         (bool ckOk, bytes memory ckRet) =
-            address(w.core_).call(abi.encodeWithSelector(CurveGaugeListerV2.checkpoint.selector, d.gauge));
+            address(w.core_).call(abi.encodeWithSelector(CurveGaugeLister.checkpoint.selector, d.gauge));
         _expectSucceeded(
             ckOk, ckRet, "TF_NO_RETROACTIVE_KILL_GATE: checkpoint of an admitted killed gauge performs no trust read"
         );
@@ -1230,10 +1025,28 @@ contract TrustedFactoryTest is BountyFixture {
         assertEq(crvUSD.balanceOf(address(fd)) - fdBefore, FEE_AMOUNT, "TF_NO_RETROACTIVE_KILL_GATE: FD law intact");
         assertEq(
             uint256(w.core_.getListing(d.gauge).status),
-            uint256(CurveGaugeListerV2.Status.Confiscated),
+            uint256(CurveGaugeLister.Status.Confiscated),
             "TF_NO_RETROACTIVE_KILL_GATE: Confiscated record"
         );
-        _expectLog(ckLogs, address(w.core_), T_ESCROW_CONFISCATED, "TF_NO_RETROACTIVE_KILL_GATE: versioned event");
+        // Original (unversioned) V1 event shape with the full-remainder
+        // amount and mandatory accounting-success event.
+        _expectLog(ckLogs, address(w.core_), T_ESCROW_CONFISCATED, "TF_NO_RETROACTIVE_KILL_GATE: original V1 event");
+        _expectLog(ckLogs, address(w.core_), T_FEE_CHECKPOINT_RESULT, "TF_NO_RETROACTIVE_KILL_GATE: accounting success");
+        bool sawConfiscation;
+        for (uint256 i = 0; i < ckLogs.length; ++i) {
+            if (
+                ckLogs[i].emitter == address(w.core_) && ckLogs[i].topics.length == 3
+                    && ckLogs[i].topics[0] == T_ESCROW_CONFISCATED
+            ) {
+                sawConfiscation = true;
+                assertEq(uint256(ckLogs[i].topics[1]), uint256(uint160(d.gauge)), "EscrowConfiscated gauge topic");
+                assertEq(uint256(ckLogs[i].topics[2]), uint256(uint160(address(fd))), "EscrowConfiscated fd topic");
+                (uint256 amount, uint256 receiptWeek) = abi.decode(ckLogs[i].data, (uint256, uint256));
+                assertEq(amount, FEE_AMOUNT, "EscrowConfiscated full remainder");
+                assertEq(receiptWeek, (block.timestamp / WEEK) * WEEK, "EscrowConfiscated receipt week");
+            }
+        }
+        assertTrue(sawConfiscation, "TF_NO_RETROACTIVE_KILL_GATE: EscrowConfiscated payload fully decoded");
     }
 
     function _tf8KillViaConfiscate(ConfigurableTrustedValidator v, World memory w)
@@ -1251,7 +1064,7 @@ contract TrustedFactoryTest is BountyFixture {
         uint256 fdBefore = crvUSD.balanceOf(address(fd));
         vm.prank(stranger);
         (bool cfOk, bytes memory cfRet) =
-            address(w.core_).call(abi.encodeWithSelector(CurveGaugeListerV2.confiscate.selector, e.gauge));
+            address(w.core_).call(abi.encodeWithSelector(CurveGaugeLister.confiscate.selector, e.gauge));
         _expectSucceeded(
             cfOk, cfRet, "TF_NO_RETROACTIVE_KILL_GATE: confiscate of an admitted killed gauge performs no trust read"
         );
@@ -1259,40 +1072,52 @@ contract TrustedFactoryTest is BountyFixture {
         assertEq(crvUSD.balanceOf(address(fd)) - fdBefore, FEE_AMOUNT, "TF_NO_RETROACTIVE_KILL_GATE: FD received");
     }
 
-    function _tf8ClaimPath(ConfigurableTrustedValidator v, World memory w) private {
-        // report/claim path: an ELIGIBLE recognized case funds the reporter
-        // half through the hook even while the checker REVERTS — no added
-        // trust read on the bounty-side funding/claim legs.
-        _fdSpace();
-        v.setTopFault(ConfigurableTrustedValidator.TopFault.None);
-        Candidate memory f2 = _method1Candidate(v);
-        (bool f2ok, bytes memory f2ret) = _paidCall(w, payer, f2);
-        _expectSucceeded(f2ok, f2ret, "control: gauge F admitted while trusted");
-        bytes32 fid = keccak256(abi.encode(uint256(1), address(w.core_), f2.gauge));
-        w.hk.stageCase(f2.gauge, fid, reporter);
-        w.hk.expectCredit(fid, FEE_AMOUNT / 2);
-        v.setTopFault(ConfigurableTrustedValidator.TopFault.Revert);
-        FactoryClaimGauge(f2.gauge).setKilled(true);
-        uint256 fdBefore = crvUSD.balanceOf(address(fd));
-        vm.prank(stranger);
-        (bool gOk, bytes memory gRet) =
-            address(w.core_).call(abi.encodeWithSelector(CurveGaugeListerV2.confiscate.selector, f2.gauge));
-        _expectSucceeded(gOk, gRet, "TF_NO_RETROACTIVE_KILL_GATE: funded claim path performs no trust read");
-        assertEq(abi.decode(gRet, (uint256)), FEE_AMOUNT, "split seizure gross");
-        assertEq(crvUSD.balanceOf(address(w.hk)), FEE_AMOUNT / 2, "reporter half funded through the hook");
-        assertEq(crvUSD.balanceOf(address(fd)) - fdBefore, FEE_AMOUNT / 2, "FD half of the split");
-        assertEq(w.hk.creditCalls(), 1, "single bounty credit on the claim path");
-    }
-
     function _tf8TerminalNoOp(ConfigurableTrustedValidator, World memory w, address gauge) private {
         // terminal no-op under a REVERTING checker: settled gauges answer
         // (0,0) with no dependency and no trust condition.
         vm.prank(stranger);
         (bool t1, bytes memory t1ret) =
-            address(w.core_).call(abi.encodeWithSelector(CurveGaugeListerV2.checkpoint.selector, gauge));
+            address(w.core_).call(abi.encodeWithSelector(CurveGaugeLister.checkpoint.selector, gauge));
         _expectSucceeded(t1, t1ret, "TF_NO_RETROACTIVE_KILL_GATE: terminal checkpoint no-op");
         (uint256 tr1, uint256 tr2) = abi.decode(t1ret, (uint256, uint256));
         assertEq(tr1 + tr2, 0, "TF_NO_RETROACTIVE_KILL_GATE: terminal (0,0)");
+    }
+
+    /// @dev Added matrix cell: with the checker still REVERTING, the views
+    /// of an admitted live gauge answer with their exact expected values —
+    /// no retroactive view gate may consult the validator.
+    function _tf8ViewGate(ConfigurableTrustedValidator, World memory w, address gauge) private view {
+        // _tf8DripGate released exactly one tranche; elapsed is one.
+        assertEq(w.core_.epochsElapsed(gauge), 1, "TF_NO_RETROACTIVE_VIEW_GATE: epochsElapsed under reverting checker");
+        assertEq(w.core_.releasable(gauge), 0, "TF_NO_RETROACTIVE_VIEW_GATE: releasable under reverting checker");
+        assertEq(
+            w.core_.getListing(gauge).remaining,
+            FEE_AMOUNT - QUARTER_AMOUNT,
+            "TF_NO_RETROACTIVE_VIEW_GATE: getListing under reverting checker"
+        );
+        assertEq(
+            uint256(w.core_.getListing(gauge).status),
+            uint256(CurveGaugeLister.Status.Active),
+            "TF_NO_RETROACTIVE_VIEW_GATE: record stays Active"
+        );
+    }
+
+    /// @dev Added matrix cell: the standalone permissionless fee maintenance
+    /// call performs no trust read under the same reverting checker.
+    function _tf8FeeGate(ConfigurableTrustedValidator, World memory w) private {
+        _fdSpace();
+        vm.recordLogs();
+        vm.prank(stranger);
+        (bool fOk, bytes memory fRet) =
+            address(w.core_).call(abi.encodeWithSelector(CurveGaugeLister.checkpointFees.selector));
+        _expectSucceeded(
+            fOk, fRet, "TF_NO_RETROACTIVE_FEE_GATE: checkpointFees performs no trust read under a reverting checker"
+        );
+        assertTrue(abi.decode(fRet, (bool)), "TF_NO_RETROACTIVE_FEE_GATE: upstream checkpoint returned");
+        assertEq(fd.last_token_time(), block.timestamp, "TF_NO_RETROACTIVE_FEE_GATE: cursor advanced");
+        _expectLog(
+            vm.getRecordedLogs(), address(w.core_), T_FEE_CHECKPOINT_RESULT, "TF_NO_RETROACTIVE_FEE_GATE: result event"
+        );
     }
 
     /// @dev Space the FD cursor so this transaction's mandatory public

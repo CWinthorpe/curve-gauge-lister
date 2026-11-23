@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.30;
 
-import {BountyForkFixture, Kit} from "./bounty/BountyForkFixture.sol";
-import {CurveGaugeListerV2} from "../../contracts/CurveGaugeListerV2.sol";
 import {ForkFixture, FVm, IErc20Venue, IControllerVenue, IMetaRegistryVenue, IGaugeVenue} from "./ForkFixture.sol";
-import {ICurveGaugeListerV2} from "../../contracts/interfaces/ICurveGaugeListerV2.sol";
+import {CurveGaugeLister} from "../../contracts/CurveGaugeLister.sol";
 
 /// @dev Live pinned-validator surface (read-only). The REAL deployed
 /// validator answers these; no mockCall/etch/storage write is used anywhere
-/// in this file for provenance (plan §5.1).
+/// in this file for provenance.
 interface ITrustedValidatorVenue {
     function owner() external view returns (address);
     function policyForFactory(address factory) external view returns (address module, uint8 method);
@@ -25,23 +23,33 @@ interface ILpMinterVenue {
 }
 
 /// @title ForkTrustedFactoryScenarios
-/// @notice The two fork trust identities of plans/TRUSTEDFACTORY-PLAN.md
-/// §5.1, running the AMENDED V2 paid admission against the REAL deployed
-/// validator, gauge modules, factories, MetaRegistry, crvUSD and
-/// GaugeController at the unchanged pin (chain 1 / block 26401019 / hash
+/// @notice The two fork trust identities (plans/V1ALIGN-WITNESSES.md §2 fork
+/// rows), rewritten onto the no-bounty ForkFixture/Trio kit: the AMENDED V1
+/// paid admission running against the REAL deployed validator, gauge modules,
+/// factories, MetaRegistry, crvUSD and GaugeController at the unchanged pin
+/// (chain 1 / block 26401019 / hash
 /// 0x55810b079923a14fb97ad548f5024f65530dbc4fb2357a38f41e13b3d27cb6d3).
 /// Positives use real state only; underlying fork probe failures are BLOCKED
 /// (suite-red), never skipped or substituted. Disclosed fixtures inherited
-/// from the bounty fork kit: local deployments of the production V2/bounty/
-/// adapters, crvUSD holder-prank funding, and the fork-only controller
-/// two-step seating — simulation, NOT production GaugeAdder authorization.
-abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
-    // ---------------- pinned live identities (plan §2/§4.1) --------------
+/// from the frozen fork kit: local deployments of the production V1/adapters,
+/// crvUSD holder-prank funding, and the fork-only controller two-step
+/// seating — simulation, NOT production GaugeAdder authorization. The
+/// validator identity is carried independently of any bounty dependency; the
+/// secondary-candidate constants below are copied from the retired bounty
+/// fixture provenance, not its governance dependencies.
+abstract contract ForkTrustedFactoryScenarios is ForkFixture {
+    // ---------------- pinned live identities (V1ALIGN manifest) ----------
     address internal constant GAUGE_MODULE = 0x999902533033Cc63c8128C501e307477932B742E;
     uint256 internal constant GAUGE_MODULE_SIZE = 1336;
     bytes32 internal constant H_GAUGE_MODULE = 0xfc5562e86bbf44b97a41e6e1e1f578a396c0fd4a5aaac85805ef62630fca36ff;
     uint256 internal constant SSNG_POLICY_METHOD = 1;
     uint256 internal constant LEGACY_POLICY_METHOD = 2;
+
+    /// @dev Retained secondary-gauge predicate control (copied from the
+    /// retired bounty fork fixture's re-proven provenance, no governance
+    /// dependency): the live validator must still answer true for this
+    /// candidate, so the suite cannot silently depend on a different checker.
+    address internal constant GAUGE_SECOND = 0x9D81d64A0e17d02EA8FD962FA13F4B89146d9a43;
 
     // ---------------- §4.1 verified legacy candidate ---------------------
     address internal constant POOL_LEGACY = 0x03470B57B05089EE40c651dAC9E0387F1f3cb46f;
@@ -54,8 +62,9 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
 
     bytes32 internal constant T_LISTED = keccak256("GaugeListed(address,address,address,int128,uint256,uint256,bool)");
 
-    /// @dev Validator core identity + policy reads at the CURRENT fork block
-    /// (read-only). Owner at both verification blocks was the DAO org.
+    /// @dev Validator core identity + module code identity at the CURRENT
+    /// fork block (read-only). Owner at both verification blocks was the DAO
+    /// org.
     function _assertValidatorIdentity() internal view {
         _assertValidatorPinAtFork();
         assertEq(ITrustedValidatorVenue(TRUSTED_VALIDATOR).owner(), DAO, "fork: validator owner is the DAO org");
@@ -67,7 +76,10 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
     /// @dev Extract and verify the EIP-1167 minimal-proxy implementation the
     /// §4.1 note records for the 45-byte clones: prefix
     /// 363d3d373d3d3d363d73, 20-byte target at bytes 10..30, suffix
-    /// 5af43d82803e903d91602b57fd5bf3.
+    /// 5af43d82803e903d91602b57fd5bf3. These are STRUCTURAL proxy-shape
+    /// assertions: they pin the clone shape and that the target carries code,
+    /// NOT the exact underlying implementation bytes; no stronger identity
+    /// proof may be claimed from them.
     function _proxyTarget(address clone) internal view returns (address impl) {
         bytes memory code = clone.code;
         require(code.length == 45, "fork: 45-byte minimal proxy expected");
@@ -116,42 +128,44 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
             ITrustedValidatorVenue(TRUSTED_VALIDATOR).validateGauge(FACTORY),
             "TF_FORK_SSNG_TRUE: the factory itself is not a gauge (false)"
         );
-        // Re-check the existing secondary gauge so retained bounty fork
-        // fixtures cannot silently rely on a different checker.
+        // Retained secondary-gauge predicate control: the shared checker must
+        // still be the one the provenance was recorded against.
         assertTrue(
             ITrustedValidatorVenue(TRUSTED_VALIDATOR).validateGauge(GAUGE_SECOND),
             "TF_FORK_SSNG_TRUE: secondary fixture gauge predicate still true"
         );
 
-        // Amended V2 paid admission with real crvUSD/controller: kit deploy
-        // asserts the pin code/hash BEFORE construction (plan §6).
-        Kit memory k = _deployThinKit();
+        // Amended V1 paid admission with real crvUSD/controller: the no-bounty
+        // trio deploy asserts the pin code/hash BEFORE construction.
+        Trio memory t = _deployTrio(5000);
         assertEq(
-            k.core_.trustedGaugeValidator(),
+            t.lister.trustedGaugeValidator(),
             TRUSTED_VALIDATOR,
             "TF_FORK_PIN_IDENTITY: core pinned to the real validator"
         );
+        _seat(t.lister);
 
-        _fundPayerOnce(payer_());
-        fvm.prank(payer_());
-        IErc20Venue(CRVUSD).approve(address(k.core_), FEE);
-        uint256 payerBefore = IErc20Venue(CRVUSD).balanceOf(payer_());
+        _fundPayerOnce(payer());
+        fvm.prank(payer());
+        IErc20Venue(CRVUSD).approve(address(t.lister), FEE);
+        uint256 payerBefore = IErc20Venue(CRVUSD).balanceOf(payer());
         uint256 nGaugesBefore = uint256(int256(IControllerVenue(CONTROLLER).n_gauges()));
         fvm.recordLogs();
-        fvm.prank(payer_());
-        k.core_.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID);
+        fvm.prank(payer());
+        t.lister.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID);
         FVm.Log[] memory logs = fvm.getRecordedLogs();
 
-        // TF_FORK_PAID_EXACT: exact fee custody, full Active record, type,
-        // raw weight zero, GaugeListed and controller membership.
-        assertEq(IErc20Venue(CRVUSD).balanceOf(payer_()), payerBefore - FEE, "TF_FORK_PAID_EXACT: payer exact debit");
-        assertEq(IErc20Venue(CRVUSD).balanceOf(address(k.core_)), FEE, "TF_FORK_PAID_EXACT: core exact credit");
-        assertEq(k.core_.totalEscrow(), FEE, "TF_FORK_PAID_EXACT: totalEscrow FEE");
-        ICurveGaugeListerV2.ListingV2 memory rec = k.core_.getListing(GAUGE_PRIMARY);
-        assertEq(uint256(rec.status), uint256(CurveGaugeListerV2.Status.Active), "TF_FORK_PAID_EXACT: Active");
+        // TF_FORK_PAID_EXACT: exact fee custody, complete original 15-field
+        // Active record, type, raw weight zero, GaugeListed and controller
+        // membership.
+        assertEq(IErc20Venue(CRVUSD).balanceOf(payer()), payerBefore - FEE, "TF_FORK_PAID_EXACT: payer exact debit");
+        assertEq(IErc20Venue(CRVUSD).balanceOf(address(t.lister)), FEE, "TF_FORK_PAID_EXACT: core exact credit");
+        assertEq(t.lister.totalEscrow(), FEE, "TF_FORK_PAID_EXACT: totalEscrow FEE");
+        CurveGaugeLister.Listing memory rec = t.lister.getListing(GAUGE_PRIMARY);
+        assertEq(uint256(rec.status), uint256(CurveGaugeLister.Status.Active), "TF_FORK_PAID_EXACT: Active");
         assertEq(rec.pool, POOL_PRIMARY, "TF_FORK_PAID_EXACT: pool");
         assertEq(rec.lpToken, lpPrimary, "TF_FORK_PAID_EXACT: lp");
-        assertEq(rec.payer, payer_(), "TF_FORK_PAID_EXACT: payer");
+        assertEq(rec.payer, payer(), "TF_FORK_PAID_EXACT: payer");
         assertEq(rec.admissionRegistry, METAREGISTRY, "TF_FORK_PAID_EXACT: admission registry");
         assertEq(rec.gaugeType, DERIVED_TYPE, "TF_FORK_PAID_EXACT: real derived type");
         assertEq(rec.listingEpoch, LISTING_EPOCH, "TF_FORK_PAID_EXACT: listing epoch");
@@ -160,11 +174,8 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
         assertEq(rec.remaining, FEE, "TF_FORK_PAID_EXACT: remaining");
         assertEq(rec.released, 0, "TF_FORK_PAID_EXACT: released");
         assertEq(rec.confiscated, 0, "TF_FORK_PAID_EXACT: confiscated");
-        assertEq(rec.reporterReward, 0, "TF_FORK_PAID_EXACT: reporterReward");
-        assertEq(rec.fdConfiscated, 0, "TF_FORK_PAID_EXACT: fdConfiscated");
-        assertEq(rec.rewardReportId, bytes32(0), "TF_FORK_PAID_EXACT: rewardReportId");
-        assertEq(rec.votium, k.va, "TF_FORK_PAID_EXACT: votium snapshot");
-        assertEq(rec.voteMarket, k.vma, "TF_FORK_PAID_EXACT: votemarket snapshot");
+        assertEq(rec.votium, address(t.va), "TF_FORK_PAID_EXACT: votium snapshot");
+        assertEq(rec.voteMarket, address(t.vma), "TF_FORK_PAID_EXACT: votemarket snapshot");
         assertEq(uint256(rec.votiumBps), 5000, "TF_FORK_PAID_EXACT: bps snapshot");
         assertEq(
             IControllerVenue(CONTROLLER).gauge_types(GAUGE_PRIMARY),
@@ -179,14 +190,14 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
         );
         bool listed;
         for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].emitter == address(k.core_) && logs[i].topics.length == 4 && logs[i].topics[0] == T_LISTED) {
+            if (logs[i].emitter == address(t.lister) && logs[i].topics.length == 4 && logs[i].topics[0] == T_LISTED) {
                 listed = true;
                 assertEq(uint256(logs[i].topics[1]), uint256(uint160(GAUGE_PRIMARY)), "GaugeListed gauge");
                 assertEq(uint256(logs[i].topics[2]), uint256(uint160(POOL_PRIMARY)), "GaugeListed pool");
-                assertEq(uint256(logs[i].topics[3]), uint256(uint160(payer_())), "GaugeListed payer");
-                (int128 t, uint256 ep, uint256 fee, bool dao) =
+                assertEq(uint256(logs[i].topics[3]), uint256(uint160(payer())), "GaugeListed payer");
+                (int128 ty, uint256 ep, uint256 fee, bool dao) =
                     abi.decode(logs[i].data, (int128, uint256, uint256, bool));
-                assertEq(t, DERIVED_TYPE, "GaugeListed type");
+                assertEq(ty, DERIVED_TYPE, "GaugeListed type");
                 assertEq(ep, LISTING_EPOCH, "GaugeListed epoch");
                 assertEq(fee, FEE, "GaugeListed fee");
                 assertFalse(dao, "GaugeListed paid");
@@ -203,7 +214,8 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
         _freshFork();
 
         // §4.1 reads and code identities, re-asserted live, including the
-        // underlying minimal-proxy targets of the 45-byte clones.
+        // underlying minimal-proxy targets of the 45-byte clones (shape
+        // evidence only; see _proxyTarget).
         _assertValidatorPinAtFork();
         address poolImpl = _proxyTarget(POOL_LEGACY);
         address gaugeImpl = _proxyTarget(GAUGE_LEGACY);
@@ -278,28 +290,29 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
             assertEq(uint256(ret.length), 0, "TF_FORK_LEGACY_MINTER_ROUTE: absence is an empty revert");
         }
 
-        // Actual paid listing on the amended V2 with real custody/record/
+        // Actual paid listing on the amended V1 with real custody/record/
         // membership.
-        Kit memory k = _deployThinKit();
-        _fundPayerOnce(payer_());
-        fvm.prank(payer_());
-        IErc20Venue(CRVUSD).approve(address(k.core_), FEE);
-        uint256 payerBefore = IErc20Venue(CRVUSD).balanceOf(payer_());
+        Trio memory t = _deployTrio(5000);
+        _seat(t.lister);
+        _fundPayerOnce(payer());
+        fvm.prank(payer());
+        IErc20Venue(CRVUSD).approve(address(t.lister), FEE);
+        uint256 payerBefore = IErc20Venue(CRVUSD).balanceOf(payer());
         uint256 nGaugesBefore = uint256(int256(IControllerVenue(CONTROLLER).n_gauges()));
         fvm.recordLogs();
-        fvm.prank(payer_());
-        k.core_.listGauge(POOL_LEGACY, GAUGE_LEGACY, LEGACY_GAUGE_INDEX, LEGACY_HANDLER_ID);
+        fvm.prank(payer());
+        t.lister.listGauge(POOL_LEGACY, GAUGE_LEGACY, LEGACY_GAUGE_INDEX, LEGACY_HANDLER_ID);
         FVm.Log[] memory logs = fvm.getRecordedLogs();
 
         // TF_FORK_LEGACY_PAID_EXACT.
-        assertEq(IErc20Venue(CRVUSD).balanceOf(payer_()), payerBefore - FEE, "TF_FORK_LEGACY_PAID_EXACT: payer debit");
-        assertEq(IErc20Venue(CRVUSD).balanceOf(address(k.core_)), FEE, "TF_FORK_LEGACY_PAID_EXACT: core credit");
-        assertEq(k.core_.totalEscrow(), FEE, "TF_FORK_LEGACY_PAID_EXACT: totalEscrow FEE");
-        ICurveGaugeListerV2.ListingV2 memory rec = k.core_.getListing(GAUGE_LEGACY);
-        assertEq(uint256(rec.status), uint256(CurveGaugeListerV2.Status.Active), "TF_FORK_LEGACY_PAID_EXACT: Active");
+        assertEq(IErc20Venue(CRVUSD).balanceOf(payer()), payerBefore - FEE, "TF_FORK_LEGACY_PAID_EXACT: payer debit");
+        assertEq(IErc20Venue(CRVUSD).balanceOf(address(t.lister)), FEE, "TF_FORK_LEGACY_PAID_EXACT: core credit");
+        assertEq(t.lister.totalEscrow(), FEE, "TF_FORK_LEGACY_PAID_EXACT: totalEscrow FEE");
+        CurveGaugeLister.Listing memory rec = t.lister.getListing(GAUGE_LEGACY);
+        assertEq(uint256(rec.status), uint256(CurveGaugeLister.Status.Active), "TF_FORK_LEGACY_PAID_EXACT: Active");
         assertEq(rec.pool, POOL_LEGACY, "TF_FORK_LEGACY_PAID_EXACT: pool");
         assertEq(rec.lpToken, LP_LEGACY, "TF_FORK_LEGACY_PAID_EXACT: distinct LP recorded");
-        assertEq(rec.payer, payer_(), "TF_FORK_LEGACY_PAID_EXACT: payer");
+        assertEq(rec.payer, payer(), "TF_FORK_LEGACY_PAID_EXACT: payer");
         assertEq(rec.admissionRegistry, METAREGISTRY, "TF_FORK_LEGACY_PAID_EXACT: registry");
         assertEq(rec.gaugeType, LEGACY_GAUGE_TYPE, "TF_FORK_LEGACY_PAID_EXACT: type 5 recorded");
         assertEq(rec.listingEpoch, LISTING_EPOCH, "TF_FORK_LEGACY_PAID_EXACT: epoch");
@@ -307,14 +320,11 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
         assertEq(rec.remaining, FEE, "TF_FORK_LEGACY_PAID_EXACT: remaining");
         assertEq(uint256(rec.epochsReleased), 0, "TF_FORK_LEGACY_PAID_EXACT: epochsReleased");
         assertEq(rec.confiscated, 0, "TF_FORK_LEGACY_PAID_EXACT: confiscated");
-        // C1 closure: the legacy row mirrors the SS-ng row's complete record
-        // field coverage (plan §5.1 legacy fork row).
+        // The legacy row mirrors the SS-ng row's complete original 15-field
+        // record coverage.
         assertEq(rec.released, 0, "TF_FORK_LEGACY_PAID_EXACT: released");
-        assertEq(rec.reporterReward, 0, "TF_FORK_LEGACY_PAID_EXACT: reporterReward");
-        assertEq(rec.fdConfiscated, 0, "TF_FORK_LEGACY_PAID_EXACT: fdConfiscated");
-        assertEq(rec.rewardReportId, bytes32(0), "TF_FORK_LEGACY_PAID_EXACT: rewardReportId");
-        assertEq(rec.votium, k.va, "TF_FORK_LEGACY_PAID_EXACT: votium");
-        assertEq(rec.voteMarket, k.vma, "TF_FORK_LEGACY_PAID_EXACT: votemarket");
+        assertEq(rec.votium, address(t.va), "TF_FORK_LEGACY_PAID_EXACT: votium");
+        assertEq(rec.voteMarket, address(t.vma), "TF_FORK_LEGACY_PAID_EXACT: votemarket");
         assertEq(uint256(rec.votiumBps), 5000, "TF_FORK_LEGACY_PAID_EXACT: bps");
         assertEq(
             IControllerVenue(CONTROLLER).gauge_types(GAUGE_LEGACY),
@@ -331,21 +341,23 @@ abstract contract ForkTrustedFactoryScenarios is BountyForkFixture {
         );
         bool listed;
         for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].emitter == address(k.core_) && logs[i].topics.length == 4 && logs[i].topics[0] == T_LISTED) {
+            if (logs[i].emitter == address(t.lister) && logs[i].topics.length == 4 && logs[i].topics[0] == T_LISTED) {
                 listed = true;
                 assertEq(uint256(logs[i].topics[1]), uint256(uint160(GAUGE_LEGACY)), "GaugeListed legacy gauge");
                 assertEq(uint256(logs[i].topics[2]), uint256(uint160(POOL_LEGACY)), "GaugeListed legacy pool");
-                (int128 t, uint256 ep, uint256 fee, bool dao) =
+                // Parity with the SS-ng row: the legacy payload pins the
+                // payer topic too.
+                assertEq(uint256(logs[i].topics[3]), uint256(uint160(payer())), "GaugeListed legacy payer");
+                (int128 ty, uint256 ep, uint256 fee, bool dao) =
                     abi.decode(logs[i].data, (int128, uint256, uint256, bool));
-                assertEq(t, LEGACY_GAUGE_TYPE, "GaugeListed legacy type");
+                assertEq(ty, LEGACY_GAUGE_TYPE, "GaugeListed legacy type");
                 assertEq(ep, LISTING_EPOCH, "GaugeListed legacy epoch");
                 assertEq(fee, FEE, "GaugeListed legacy fee");
                 assertFalse(dao, "GaugeListed legacy paid");
             }
         }
         assertTrue(listed, "TF_FORK_LEGACY_PAID_EXACT: GaugeListed emitted and decoded");
-        // The legacy factory remains OUTSIDE the unchanged supported kill
-        // route: no legacy bounty award is required or claimed here.
-        assertEq(k.b.lister(), address(k.core_), "bounty binding unchanged for the legacy candidate");
+        // There is no legacy bounty route to prove here; the legacy factory
+        // remains outside the retired supported-kill governance machinery.
     }
 }
