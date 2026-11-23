@@ -225,15 +225,19 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
             revert PlatformUnderpull();
         }
 
-        // Nonce-keyed so receipts from distinct keys never alias across the
-        // log's history (the local ordinal is adapter-domain only, S09),
+        // Nonce-keyed so receipts from distinct log entries do not alias
+        // across the log's OWN history (the local ordinal is adapter-domain
+        // only, S09; no globally-unique-identifier claim is made beyond the
+        // tuple+ordinal construction and the emitting adapter's domain),
         // while a duplicate (gauge, scheduledEpoch) is rejected before any
-        // pull. This concrete duplicate-key rejection is the S21 reason the
-        // core forbids a mixed split onto one shared endpoint — one quarter
-        // would route two same-key calls here. It is VoteMarket-specific
-        // ingress semantics, NOT a universal adapter rule: Votium's
-        // live-round witness separately accepts multiple same-gauge entries
-        // in one round.
+        // pull — this adapter keeps KEYED and CHRONOLOGICAL records (the
+        // Votium side is event-only; per CX-RECEIPT the two venue policies
+        // are distinct by law). This concrete duplicate-key rejection is the
+        // S21 reason the core forbids a mixed split onto one shared
+        // endpoint — one quarter would route two same-key calls here. It is
+        // VoteMarket-specific ingress semantics, NOT a universal adapter
+        // rule: Votium's live-round witness separately accepts multiple
+        // same-gauge entries in one round.
         //
         // CX-DERIVED-RECEIPT: the receipt is a pure function of the
         // immutable row fields plus its one-based position in the log, so

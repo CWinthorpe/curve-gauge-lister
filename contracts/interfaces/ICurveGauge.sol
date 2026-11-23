@@ -10,7 +10,9 @@ interface ICurveGauge {
     function lp_token() external view returns (address);
 
     /// @notice Reject a gauge already disabled at admission. After admission
-    /// this same getter is the ONLY settlement kill oracle under Amendment A2
-    /// (plans/PLAN.md): true confiscates; controller weight is never consulted.
+    /// this same getter is the ONLY settlement kill oracle under the named
+    /// Amendment A2 law (current reference: `CurveGaugeLister.checkpoint`/
+    /// `_gaugeKilled` and docs/CURVE-PROPOSAL.md §"Kill and confiscation"):
+    /// true confiscates; controller weight is never consulted.
     function is_killed() external view returns (bool);
 }

@@ -55,7 +55,23 @@ composition only; it is not a GaugeAdder seating receipt, and neither a
 narrow shim, the raw-admin seat nor the empty absence-revert alone supplies
 those properties. Immediate typed membership (including valid type zero) and
 the DAO's existing routes are preserved obligations of any approved
-composition, not inferred from the simulation.
+composition, not inferred from the simulation. Production selection is still
+OPEN, so the caller/role graph and its witness are recorded as a
+PRE-ACTIVATION GATE in the owner-held candidate-bound release evidence
+package (producible on demand): once a graph is selected and approved, the
+admission proof is THAT graph — its exact caller/role table, the authorized
+bind/enablement owners, and the named witness cells — and this section then
+states it; until then no deployment is authorized by the simulation, and no
+unconditional empty-revert acceptance rule is inferred from the pinned
+controller's observed absence behaviour.
+
+The same package carries the confiscation-accounting bound obligation for
+the selected FeeDistributor allocator (one obligation binding the floored
+inclusive coverage limit, the separate ordinary-caller eligibility rule, the
+two-sided exact custody, the mandatory checkpoint and both postchecks to the
+approved allocator source/runtime re-reads recorded below) and the
+invariant→clause→implementation→evidence index linking every current
+obligation to its approved clause and independent witness.
 
 ## Fixed regression-fork anchor
 

@@ -13,12 +13,19 @@ interface IIncentivePlatform {
     function lister() external view returns (address);
 
     /// @notice Pull EXACTLY amount from the lister and irrevocably fund a
-    /// gauge-bound platform deposit/ingress; return a nonzero durable receipt
-    /// identifier. Provenance (S09): a receipt is an opaque adapter-domain
-    /// value attested by the adapter (emitter) that minted it on this chain —
-    /// chain 1 here — via its record getters and its own deposit event. It
-    /// correlates the ingress call; it is not a destination delivery token and
-    /// carries no venue-external meaning.
+    /// gauge-bound platform deposit/ingress; return a nonzero adapter-domain
+    /// L1-ingress correlation identifier. Provenance (S09; one common
+    /// contract per CX-RECEIPT): the receipt is nonzero and opaque, attested
+    /// by the adapter (emitter) that minted it on this chain — chain 1 here —
+    /// via its deposit event and its record getters WHERE THAT ADAPTER
+    /// IMPLEMENTS THEM (Votium's proof is event-only with a repeatable
+    /// full-tuple value; VoteMarket keeps keyed/chronological records and
+    /// rejects repeated (gauge, scheduledEpoch) pairs). It correlates the
+    /// recorded ingress call within the adapter's own domain; it is NOT a
+    /// globally unique identifier (a Votium deposit of the same tuple in the
+    /// same round repeats the value) and NOT a destination delivery token —
+    /// it carries no venue-external meaning and proves nothing about
+    /// acceptance beyond that same-chain adapter call.
     /// @dev scheduledEpoch is the original weekly escrow maturity, not an
     /// assertion that a late deposit buys votes retroactively. No arbitrary
     /// recipient/calldata.

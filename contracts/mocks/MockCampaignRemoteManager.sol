@@ -14,7 +14,9 @@ import {SafeToken} from "../libraries/SafeToken.sol";
 /// `params.rewardToken` from the caller and records the full call. Like the
 /// real manager, `createCampaign` returns nothing: campaign creation is
 /// asynchronous (LaPoste) and the campaign id surfaces on L2, so the
-/// recorded call is the L1 receipt proof.
+/// recorded L1 call — not any returned value, and not a destination-campaign
+/// fact — is what this fixture makes inspectable as ingress evidence
+/// (CX-LABELS: "recorded campaign", never "live campaign").
 /// @dev POLICY FIXTURE (not manager guards): the deployed manager validates
 /// neither the destination chain nor `msg.value == additionalGasLimit *
 /// gasPrice` — it forwards the supplied destination and ALL `msg.value` to

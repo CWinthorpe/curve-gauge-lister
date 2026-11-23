@@ -62,7 +62,7 @@ There is no payable core entrypoint, receive or fallback. Owner setters and two-
 - `OwnershipTransferStarted(address indexed owner,address indexed pendingOwner)`
 - `OwnershipTransferred(address indexed previousOwner,address indexed newOwner)`
 
-Successful confiscation emits `EscrowConfiscated` then `FeeCheckpointResult(true)` after exact custody and mandatory accounting succeed. Its receipt week is the transfer's week floor, not a promise that all fees enter one upstream week bucket. A standalone `checkpointFees` result reports only whether that upstream call returned.
+Successful confiscation emits `EscrowConfiscated` then `FeeCheckpointResult(true)` after exact custody and mandatory accounting succeed. `EscrowConfiscated` is the completion signal for escrow accounting (CX-MAINT, current ABI): the mandatory same-transaction accounting postchecks have already passed when it commits. `FeeCheckpointResult` carries two documented meanings under this ABI — standalone best-effort maintenance telemetry from the retained `checkpointFees()` wrapper, and retained compatibility telemetry emitted after `EscrowConfiscated` on the confiscation path — and neither is separately load-bearing accounting evidence beyond the fields it names. Its receipt week is the transfer's week floor, not a promise that all fees enter one upstream week bucket. A standalone `checkpointFees` result reports only whether that upstream call returned; the wrapper's Boolean, its failure log and the caller identity are not equivalent to a direct FeeDistributor maintenance call (which stays available under the documented ordinary-caller policy), and no local change removes upstream shared-window contention.
 
 ## Errors (33, including shared token errors)
 

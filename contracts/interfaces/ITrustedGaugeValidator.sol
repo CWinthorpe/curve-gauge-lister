@@ -19,6 +19,14 @@ interface ITrustedGaugeValidator {
     /// (reciprocal factory/module proof; plan §2.1). Faults in the
     /// validator's own dependency reads are collapsed to false by the real
     /// validator and stay rejections.
+    /// @dev The `bool` here is the WIRE claim only (CX-HISTORY): the product
+    /// call site does not trust the decoder. `CurveGaugeLister
+    /// ._requireTrustedGauge` requires a SUCCESSFUL staticcall returning
+    /// EXACTLY 32 bytes whose uint256 word is canonically 1 (canonical zero
+    /// → UntrustedGauge; failure, wrong length, or word > 1 →
+    /// TrustedGaugeCheckFailed, with checker error data normalized, never
+    /// bubbled). That exact-length/canonical-true law lives at the call
+    /// site and is not weakened by this declaration's typed return.
     /// @param gauge The candidate GAUGE address — never a pool, LP token,
     /// factory, caller or inferred deployer (plan §2.1).
     function validateGauge(address gauge) external view returns (bool);

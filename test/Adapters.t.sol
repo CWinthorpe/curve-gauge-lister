@@ -252,6 +252,12 @@ contract AdaptersTest is TestBase {
     // ---------------------------------------------------------------
 
     function test_Adapter_VotiumDeterministicNonzeroReceipts() public {
+        // Common receipt contract (CX-RECEIPT): the Votium proof is
+        // EVENT-ONLY (no record getters on this adapter) and the full-tuple
+        // receipt is REPEATABLE — the same (gauge, scheduledEpoch, amount,
+        // round) mints the same value again. It is an adapter-domain
+        // ingress correlation, not a globally unique identifier and not a
+        // destination delivery token.
         VotiumKit memory kit = freshVotiumKit(address(votiumMock));
         address g = actor("gaugeA");
         uint256 e = T0 + WEEK;
@@ -607,10 +613,10 @@ contract AdaptersTest is TestBase {
         uint256 e = T0 + WEEK;
 
         assertEq(address(bare).balance, 0, "unfunded");
-        assertEq(bare.ethDeficit(HALF), REQUIRED_ETH, "deficit equals per-call gas value");
-        assertEq(bare.ethDeficit(0), 0, "zero-amount query needs no gas");
+        assertEq(bare.ethDeficit(HALF), REQUIRED_ETH, "positive query quotes ONE message under current settings");
+        assertEq(bare.ethDeficit(0), 0, "deliberate no-message query returns zero");
         vmx.deal(address(bare), REQUIRED_ETH / 2);
-        assertEq(bare.ethDeficit(HALF), REQUIRED_ETH / 2, "partial float, partial deficit");
+        assertEq(bare.ethDeficit(HALF), REQUIRED_ETH / 2, "partial float, partial one-message shortfall");
         uint256 crmsBefore = crmMock.campaignCount();
         uint256 callerBefore = token.balanceOf(address(caller));
         vm.expectRevert(VoteMarketAdapter.InsufficientEth.selector);
@@ -619,7 +625,7 @@ contract AdaptersTest is TestBase {
         assertEq(crmMock.campaignCount(), crmsBefore, "no campaign survived");
         assertEq(token.allowance(address(caller), address(bare)), 0, "approval rolled back with the call");
         vmx.deal(address(bare), REQUIRED_ETH);
-        assertEq(bare.ethDeficit(HALF), 0, "funded");
+        assertEq(bare.ethDeficit(HALF), 0, "funded for one message");
         caller.deposit(IIncentivePlatform(address(bare)), g, e, HALF);
         assertEq(crmMock.campaignCount(), crmsBefore + 1, "succeeds after top-up");
 
@@ -745,9 +751,15 @@ contract AdaptersTest is TestBase {
         assertEq(c.params.manager, address(adapterX), "manager is the adapter");
         assertEq(c.destinationChainId, 42161, "destination stays 42161");
 
-        // Mispricing is caught by the manager-side check: an adapter priced
-        // 2 gwei against a 1-gwei CRM mock reverts on value before anything
-        // moves.
+        // Mispricing is caught by the controlled-messenger FIXTURE's
+        // value-equality POLICY check (MockCampaignRemoteManager BadGasValue
+        // — the real manager validates no msg.value equality; see its @dev
+        // note): an adapter priced 2 gwei against a 1-gwei fixture billing
+        // reverts on value before the recorded call, and the whole deposit —
+        // pull and approvals included — rolls back. The fixture agreeing with
+        // the adapter's own `additionalGasLimit * gasPrice` computation is
+        // mock-side pricing agreement, NOT live LaPoste acceptance evidence;
+        // live bridge pricing stays a deployment check.
         VmKit memory mismatched = freshVmKit(address(crmMock));
         vm.prank(adapterManager);
         mismatched.adapter_.setGasSettings(CREATION_GAS, BLACKLIST_GAS, 2 * GWEI);
@@ -1303,7 +1315,7 @@ contract AdaptersTest is TestBase {
         vm.warp(T0 + WEEK);
         lister.checkpoint(gauge);
         assertEq(votiumMock.incentiveCount(), 1, "quarter one funded");
-        assertEq(crmMock.campaignCount(), 1, "quarter one campaign live");
+        assertEq(crmMock.campaignCount(), 1, "quarter one campaign call recorded on L1 (ingress, not delivery)");
 
         killGauge(gauge);
         vm.warp(T0 + 3 * WEEK);

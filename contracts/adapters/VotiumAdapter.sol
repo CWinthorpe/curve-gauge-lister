@@ -168,10 +168,16 @@ contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
         // Deterministic in (gauge, scheduledEpoch, amount, round); a zero
         // receipt is unreachable by construction but guarded explicitly.
         receipt = keccak256(abi.encode(gauge, scheduledEpoch, amount, round));
-        // S09: this hash is an opaque adapter-domain identifier. `round`
+        // S09 (common contract per CX-RECEIPT): this hash is an opaque
+        // adapter-domain L1-ingress correlation identifier. `round`
         // provenance is the live activeRound() read at THIS chain-1 ingress
         // call; the value attests the recorded deposit only, never
         // destination delivery or venue-side acceptance beyond that call.
+        // This venue's proof is EVENT-ONLY — there is deliberately no
+        // deposit record or record getter here — and the full-tuple value is
+        // REPEATABLE: the same (gauge, scheduledEpoch, amount, round) mints
+        // the same receipt again (Votium permits repeated same-gauge entries;
+        // no global uniqueness is claimed).
         if (receipt == bytes32(0)) revert BadReceipt();
         emit VotiumDeposit(gauge, scheduledEpoch, round, amount, receipt);
     }

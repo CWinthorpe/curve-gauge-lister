@@ -332,8 +332,14 @@ contract TrustedFactoryTest is TrustedFactoryFixture {
 
         // Factory with no configured policy, zero factory, no usable
         // factory(), and a plain non-factory gauge are all rejected on the
-        // paid lane. Fixture-model policy semantics; the live equivalents
-        // are certified by the two fork identities.
+        // paid lane. These cells are FIXTURE-MODEL policy semantics: the two
+        // fork identities observe the live pinned validator for their named
+        // candidates (SS-ng and distinct-LP legacy predicate true,
+        // factory-is-not-a-gauge false) and are the only place live pinned
+        // state is seen — they do not exercise these four negative shapes
+        // live, and nothing here should be read as live-policy certification
+        // (mutable upstream policy is reviewed operationally per
+        // docs/DEPLOYMENT-PINS.md).
         ConfigurableTrustedValidator v5 = new ConfigurableTrustedValidator();
         World memory w5 = _newWorld(address(v5));
         Candidate memory c5 = _legacyCandidate(v5);

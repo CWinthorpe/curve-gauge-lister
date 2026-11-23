@@ -11,7 +11,12 @@ Historical venue-integration research, not the current deployment or product spe
     gauges, amounts, maxPerVote, excluded)` on Votium v2
     `DEPOSIT_ADDRESS = 0x63942E31E98f1833A234077f47880A66136a2D1e`,
     round = `activeRound()` at call time; approval to deposit address set
-    once in constructor (unlimited).
+    once in constructor (unlimited). [HISTORICAL OBSERVATION OF THE YB
+    HELPER — the product does NOT adopt this shape: both adapters use exact
+    bounded approvals cleared after every venue call, with NO standing-approval
+    exception; current law at `contracts/adapters/VotiumAdapter.sol`
+    (`deposit`, `setExcluded`) and docs/OPERATIONS.md. Retained as research
+    history, not permission to change those rules.]
 - DepositHelperVoteMarket `0xfD97b14E1d91B82936e35aE7b20dA4FD16C855B1` (AGPL-3.0)
   - LIVE READS: owner == manager == 0x40907540d8a6c65c637785e8f8b742ae6b0b9968;
     votemarket = 0x8c2c5a295450ddff4cb360ca73fccc12243d14d9 (Arbitrum side);
@@ -34,11 +39,24 @@ Historical venue-integration research, not the current deployment or product spe
     campaign id surfaces on L2.
 
 ## Implications for CurveGaugeLister adapters (exec3 scope)
+
+[HISTORICAL RECORD — these were the exec3-scope implications recorded
+2026-11-12. Each formula/exception below is annotated at its site where the
+shipped product law differs; the shipping adapters and docs/OPERATIONS.md,
+docs/ABI.md and docs/DEPLOYMENT-PINS.md govern. Source provenance, venue
+calldata shapes, receipt preimages and the no-standing-approval rule are the
+current law; this section is not authority to change them.]
+
 1. Both platforms ARE plain mainnet calls from the escrow's perspective;
    the earlier "bridge problem" note is obsolete.
 2. VotiumAdapter: approve crvUSD to 0x63942E31...2D1e (bounded, per deposit
    flow), call depositUnevenSplitGauges (single-gauge arrays) for
    activeRound(); receipt = keccak of (round, gauge, amount).
+   [HISTORICAL FORMULA — the shipped preimage is
+   `keccak256(abi.encode(gauge, scheduledEpoch, amount, round))` in that
+   field order, per `contracts/adapters/VotiumAdapter.sol deposit` and this
+   file's header note; the receipt is an adapter-domain ingress correlation,
+   event-only on this venue, not a delivery token.]
 3. VoteMarketAdapter: approve crvUSD to CampaignRemoteManager
    0x53ad4cd1...1ca2, call createCampaign{value} with params bound to
    (block.chainid, gauge, manager = adapter), numberOfPeriods = 2,
@@ -46,11 +64,21 @@ Historical venue-integration research, not the current deployment or product spe
    path and an ETH-shortfall revert (do NOT silently skip a quarter —
    core requires exact funding; adapter must revert and the checkpoint
    rolls back, same as today's mocks).
+   [HISTORICAL: the shipped adapter deliberately has NO owner/topup-withdraw
+   path — `receive()` accepts float from anyone and nothing takes ETH back
+   out (INTEL §4 deviation); the shortfall revert is `InsufficientEth`.]
 4. DELIBERATE DEVIATIONS from the YB helpers in our adapters:
    - no owner `execute()` / `withdrawEther` surface;
    - no unlimited standing approvals — approve exact amount, clear after
      (matches core §7 pattern), except where platform ABI requires
      standing approvals, then cap and document;
+     [HISTORICAL: the "matches core §7 pattern" reference was to the retired
+     plan section — the stable current reference is the shipped adapters'
+     bounded-approve-then-clear law in `contracts/adapters/` and
+     docs/OPERATIONS.md. The "except where platform ABI requires standing
+     approvals" EXCEPTION WAS NOT ADOPTED: both adapters approve exact,
+     clear after, and keep no standing allowance; no venue-side standing-
+     approval is used by this product.]
    - per-gauge deposit binding (our model), not shared weights array;
    - AGPL license of the VoteMarket helper: we reimplement the call, not
      copy source.

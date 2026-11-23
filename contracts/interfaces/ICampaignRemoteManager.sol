@@ -37,7 +37,9 @@ interface ICampaignRemoteManager {
     /// (`additionalGasLimit * gasPrice` in this product) is the CALLER's
     /// budgeting policy, and the messenger's acceptance of that payment is a
     /// deployment-time check. Returns nothing: the campaign id surfaces on
-    /// L2, so the durable L1 proof of funding is the recorded call itself.
+    /// L2, so the durable L1 EVIDENCE is the recorded ingress call itself —
+    /// it proves the funded call was made on chain 1, not that a destination
+    /// campaign was created, accepted or funded (CX-RECEIPT/CX-LABELS).
     function createCampaign(
         CampaignCreationParams calldata params,
         uint256 destinationChainId,
