@@ -97,11 +97,11 @@ contract MockVotiumV2 is IVotiumV2 {
         emit RoundSet(round_);
     }
 
-    /// @notice Test fixture: allow another reward token.
-    function allowToken(address token_) external {
-        _allowedTokens[token_] = true;
-        emit TokenAllowed(token_);
-    }
+    // CX-MOCK-PRUNE: the unused `allowToken` fixture setter was removed
+    // after confirming no retained witness in the bound inventory calls it;
+    // the token allowlist keeps its constructor-seeded shape (the real
+    // product's unapproved-reward-token gate stays modeled by the
+    // UnsupportedToken check in deposit).
 
     /// @inheritdoc IVotiumV2
     function maxExclusions() external view returns (uint256) {

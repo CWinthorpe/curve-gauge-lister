@@ -1095,15 +1095,25 @@ contract AdaptersTest is TestBase {
         kit.adapter_.transferOwnership(newMgr);
         assertEq(kit.adapter_.owner(), adapterManager, "proposal does not move authority");
 
-        // auditfix001 §1: a PENDING owner cannot bind a still-unbound adapter
-        // (nor can any other non-owner).
+        // auditfix001 §1 (CX-BIND-TEST ordering): a PENDING owner cannot
+        // bind a still-unbound adapter. The proposal is made ON THE TESTED
+        // INSTANCE first, so the rejection below is the actual pending-owner
+        // state, not merely an unrelated address hitting NotOwner before
+        // this instance ever had a proposal.
         VotiumAdapter freshVotium = new VotiumAdapter(address(token), adapterManager, address(votiumMock));
+        vm.prank(adapterManager);
+        freshVotium.transferOwnership(newMgr);
+        assertEq(freshVotium.owner(), adapterManager, "pending proposal does not move authority");
+        assertEq(freshVotium.pendingOwner(), newMgr, "tested instance is in pending state");
         vm.prank(newMgr);
         vm.expectRevert(AdapterOwnable.NotOwner.selector);
         freshVotium.setLister(address(kit.caller));
+        // Rejection of an unrelated outsider on the same instance stays.
         vm.prank(stranger);
         vm.expectRevert(AdapterOwnable.NotOwner.selector);
         freshVotium.setLister(address(kit.caller));
+        // Acceptance happens on the SAME instance that carried the pending
+        // state (below, before any binding by the new owner).
 
         // Before acceptance the OLD owner still cannot rebind a successful
         // binding, and the pending owner cannot accept for a stranger.
@@ -1135,12 +1145,13 @@ contract AdaptersTest is TestBase {
         assertEq(kit.adapter_.maxPerVote(), 1, "new manager configures");
 
         // After acceptance only the NEW owner can bind a still-unbound
-        // adapter: hand the fresh adapter to the new owner as well; the old
+        // adapter: the fresh adapter is already in the pending state above;
+        // the pending owner now accepts ON THAT SAME INSTANCE, the old
         // owner is then refused and the new owner binds exactly once.
-        vm.prank(adapterManager);
-        freshVotium.transferOwnership(newMgr);
         vm.prank(newMgr);
         freshVotium.acceptOwnership();
+        assertEq(freshVotium.owner(), newMgr, "pending instance acceptance moved authority");
+        assertEq(freshVotium.lister(), address(0), "acceptance alone bound nothing");
         vm.prank(adapterManager);
         vm.expectRevert(AdapterOwnable.NotOwner.selector);
         freshVotium.setLister(address(kit.caller));
@@ -1149,6 +1160,12 @@ contract AdaptersTest is TestBase {
         vm.prank(newMgr);
         freshVotium.setLister(address(kit.caller));
         assertEq(freshVotium.lister(), address(kit.caller), "new owner bound the votium adapter");
+        // Separate bound-instance no-rebind control on the fresh adapter:
+        // after a successful bind neither the new nor the old owner can
+        // replace it.
+        vm.prank(newMgr);
+        vm.expectRevert(VotiumAdapter.ListerAlreadySet.selector);
+        freshVotium.setLister(actor("secondLister"));
 
         // Both adapter classes share the same two-step binding law.
         VoteMarketAdapter va = new VoteMarketAdapter(address(token), adapterManager, address(crmMock), VM_L2);

@@ -98,28 +98,19 @@ abstract contract TrustedFactoryFixture is TestBase {
     }
 
     /// @dev The complete observable snapshot surface (V1ALIGN-WITNESSES.md §2
-    /// snapshot port rule): the whole public V1 Listing, totalEscrow, ACTOR
-    /// balance/allowance toward the core, core/FD/venue balances,
-    /// core-to-venue allowances, controller membership/type/weight/count and
-    /// the venue receipt state touched by the fixture. Compared to PRE-STATE,
-    /// never only to zero. Bounty hook fields are dropped as authorized; no
-    /// surviving custody field is.
+    /// snapshot port rule): the whole public V1 Listing bound by ONE keccak
+    /// (CX-TRUST: a whole-listing hash removes the manual tuple projection
+    /// without losing any compared field — every already-written candidate
+    /// record field distinguishes the snapshot), totalEscrow observed
+    /// SEPARATELY, ACTOR balance/allowance toward the core, core/FD/venue
+    /// balances, core-to-venue allowances, controller
+    /// membership/type/weight/count and the venue receipt state touched by
+    /// the fixture. The distinct custody, controller, allowance and venue
+    /// observations are retained as separate fields (CX-TRUST). Compared to
+    /// PRE-STATE, never only to zero. Bounty hook fields are dropped as
+    /// authorized; no surviving custody field is.
     struct Snap {
-        address pool;
-        address lpToken;
-        address payerAddr;
-        address admissionRegistry;
-        int128 gaugeType;
-        uint256 listingEpoch;
-        uint8 status;
-        uint8 epochsReleased;
-        uint256 deposited;
-        uint256 released;
-        uint256 remaining;
-        uint256 confiscated;
-        address votium;
-        address voteMarket;
-        uint16 votiumBps;
+        bytes32 listingHash;
         uint256 totalEscrow;
         uint256 balActor;
         uint256 balCore;
@@ -338,22 +329,9 @@ abstract contract TrustedFactoryFixture is TestBase {
     /// rows track the ACTUAL actor of the exercised call (V1ALIGN-WITNESSES
     /// §2 snapshot port rule), never a fixed unrelated payer.
     function _snapActor(World memory w, address gauge, address who) internal view returns (Snap memory s) {
-        CurveGaugeLister.Listing memory rec = w.core_.getListing(gauge);
-        s.pool = rec.pool;
-        s.lpToken = rec.lpToken;
-        s.payerAddr = rec.payer;
-        s.admissionRegistry = rec.admissionRegistry;
-        s.gaugeType = rec.gaugeType;
-        s.listingEpoch = rec.listingEpoch;
-        s.status = uint8(rec.status);
-        s.epochsReleased = rec.epochsReleased;
-        s.deposited = rec.deposited;
-        s.released = rec.released;
-        s.remaining = rec.remaining;
-        s.confiscated = rec.confiscated;
-        s.votium = rec.votium;
-        s.voteMarket = rec.voteMarket;
-        s.votiumBps = rec.votiumBps;
+        // Whole public Listing bound by one hash (CX-TRUST); totalEscrow and
+        // the custody/controller/allowance/venue observations stay separate.
+        s.listingHash = keccak256(abi.encode(w.core_.getListing(gauge)));
         s.totalEscrow = w.core_.totalEscrow();
         s.balActor = crvUSD.balanceOf(who);
         s.balCore = crvUSD.balanceOf(address(w.core_));

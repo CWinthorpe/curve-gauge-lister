@@ -118,21 +118,6 @@ contract MockListingController is IListingController {
         st.timeWeight = nextTime;
     }
 
-    /// @notice Test-only voting surrogate: require membership, add raw scheduled
-    /// weight for next week. Upstream GaugeController propagates the previous
-    /// point before voting and combines old bias with the new increment
-    /// (GaugeController.vy _get_weight / voting), so the next bias carries
-    /// forward from the CURRENT scheduled point, never from an unwritten future
-    /// slot. Explicitly NOT the real veCRV power/slope implementation.
-    function voteForGauge(address gauge, uint256 addedWeight) external {
-        GaugeState storage st = _gauges[gauge];
-        if (!st.registered) revert GaugeNotAdded();
-        uint256 nextTime = _epochStart(block.timestamp) + WEEK;
-        uint256 nextBias = st.points[st.timeWeight].bias + addedWeight;
-        _writePoint(st, nextTime, nextBias);
-        st.timeWeight = nextTime;
-    }
-
     /// @notice Latest scheduled-point timestamp, matching the upstream view
     /// concept.
     function time_weight(address gauge) external view returns (uint256) {

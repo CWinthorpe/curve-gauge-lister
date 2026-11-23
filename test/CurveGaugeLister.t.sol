@@ -733,13 +733,20 @@ contract CurveGaugeListerTest is TestBase {
         listDaoExpectRevert(poolD, gaugeD, 0, 3, 0);
 
         // Externally controller-listed gauge: the controller's permanent
-        // registry rejects it on both paths.
+        // registry rejects it on both paths. CX-NEG: name the exact checked
+        // rejection (occupied controller registry, with the gauge argument)
+        // on BOTH admission lanes instead of a bare revert; the full-
+        // rollback fee assertion below stays.
         (address poolE, address gaugeE,) = deployAuthenticatedPool(4, 0);
         vm.prank(controllerDao);
         controller.add_gauge(gaugeE, int128(0), 3);
         uint256 payerBeforeE = token.balanceOf(payer);
-        listPaidExpectRevert(poolE, gaugeE, 0, 4);
-        listDaoExpectRevert(poolE, gaugeE, 0, 4, 0);
+        vm.prank(payer);
+        vm.expectRevert(abi.encodeWithSelector(CurveGaugeLister.ControllerRegistryOccupied.selector, gaugeE));
+        lister.listGauge(poolE, gaugeE, 0, 4);
+        vm.prank(daoOwner);
+        vm.expectRevert(abi.encodeWithSelector(CurveGaugeLister.ControllerRegistryOccupied.selector, gaugeE));
+        lister.listGaugeNoEscrow(poolE, gaugeE, 0, 4, 0);
         assertEq(token.balanceOf(payer), payerBeforeE, "no fee for controller-listed rejection");
     }
 

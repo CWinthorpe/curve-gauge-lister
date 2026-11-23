@@ -82,20 +82,15 @@ contract TrustedFactoryModel {
 /// with the strict successful-zero-only minter fallback. The idle (3) VAULT
 /// and (4) FACTORY_IS_VALID_GAUGE arms are pruned (S07, against the named
 /// witness inventory); an unsupported method still resolves to false. A
-/// failed/malformed first lookup NEVER permits fallback. `fault` injects a
-/// module-level revert, which the validator model collapses to false exactly
-/// like the real validator's internal fault handling.
+/// failed/malformed first lookup NEVER permits fallback.
+/// @dev CX-MOCK-PRUNE: the module-level `fault` seam was removed with its
+/// only writer — no retained witness in the bound inventory configures it
+/// (the validator model's own top-level fault menu and the factory
+/// direct-lookup faults remain the exercised fault controls). An
+/// unsupported method still resolves to false. A failed/malformed first
+/// lookup NEVER permits fallback.
 contract GaugeValidationModuleModel {
-    error ModuleFault();
-
-    bool public fault;
-
-    function setFault(bool enabled) external {
-        fault = enabled;
-    }
-
     function validateGauge(address gauge, address factory, uint8 method) external view returns (bool) {
-        if (fault) revert ModuleFault();
         address lp = IFactoryGaugeLike(gauge).lp_token();
         if (method == 1) {
             // DIRECT_LP: the factory's reverse association must equal the
@@ -259,34 +254,42 @@ contract ConfigurableTrustedValidator {
 }
 
 /// @title PreAdmissionObservingValidator
-/// @notice Test-only ORDERING witness (S04): while answering the admission
-/// `validateGauge` read, it directly OBSERVES the candidate's listing record
-/// and the core's aggregate liability on the armed core, and returns
-/// canonical true only while both match the armed pre-write expectations
-/// (Unlisted record, `expectedEscrow`). Post-revert snapshot equality alone
-/// does not prove the read preceded the writes; here acceptance is
-/// conditioned on what the read itself saw: a mutant that moves the trust
-/// read after the StoredListing/totalEscrow writes makes the honest call
-/// observe post-write state, return canonical false and revert
-/// UntrustedGauge. Any argument other than the armed gauge reverts, pinning
-/// the exact call argument. Runs inside the core's staticcall frame: it
-/// observes only and writes nothing. Disclosed fixture control, never a
-/// product dependency.
+/// @notice Test-only ORDERING witness (S04; complete-observation form per
+/// CX-TRUST): while answering the admission `validateGauge` read, it
+/// directly OBSERVES the candidate's COMPLETE public `getListing` record and
+/// the core's aggregate liability on the armed core. Status and aggregate
+/// alone do not distinguish other already-written fields, so the witness
+/// compares the whole-listing keccak against the armed expectation and
+/// separately observes `totalEscrow`; acceptance is canonical true only while
+/// BOTH match the armed world. Post-revert snapshot equality alone does not
+/// prove the read preceded the writes; a mutant that moves the trust read
+/// after the StoredListing/totalEscrow writes makes the honest call observe
+/// post-write state (a record hash or liability that matches only the
+/// complementary world), return canonical false and revert UntrustedGauge.
+/// Any argument other than the armed gauge reverts, pinning the exact call
+/// argument. Runs inside the core's staticcall frame: it observes only and
+/// writes nothing. Disclosed fixture control, never a product dependency.
 contract PreAdmissionObservingValidator {
     error UnexpectedArgument();
 
     CurveGaugeLister private _core;
     address private _gauge;
+    bytes32 private _expectedListingHash;
     uint256 private _expectedEscrow;
     bool private _armed;
 
     /// @notice Arm the mid-read observation: the candidate gauge, the core
-    /// to observe, and the totalEscrow value that must still hold AT READ
-    /// TIME (0 before any paid admission; a mutant-visible value is armed by
-    /// the adversarial control cell).
-    function arm(address core_, address gauge_, uint256 expectedEscrow_) external {
+    /// to observe, the keccak of the COMPLETE expected `getListing`
+    /// observation AT READ TIME (all-zero Unlisted record for the honest
+    /// pre-write world; the full written record for the complementary
+    /// post-write world — faithfully represented, never read back from the
+    /// implementation being tested), and the totalEscrow value that must
+    /// still hold AT READ TIME (0 before any paid admission; a
+    /// mutant-visible value is armed by the adversarial control cell).
+    function arm(address core_, address gauge_, bytes32 expectedListingHash_, uint256 expectedEscrow_) external {
         _core = CurveGaugeLister(core_);
         _gauge = gauge_;
+        _expectedListingHash = expectedListingHash_;
         _expectedEscrow = expectedEscrow_;
         _armed = true;
     }
@@ -294,9 +297,12 @@ contract PreAdmissionObservingValidator {
     function validateGauge(address gauge) external view returns (bool) {
         require(_armed, "not armed");
         if (gauge != _gauge) revert UnexpectedArgument();
-        if (uint8(_core.getListing(gauge).status) != uint8(CurveGaugeLister.Status.Unlisted)) {
+        // Complete candidate record comparison (CX-TRUST): any already-
+        // written field — not just status — makes the hash differ.
+        if (keccak256(abi.encode(_core.getListing(gauge))) != _expectedListingHash) {
             return false; // a listing write already preceded the trust read
         }
+        // Aggregate liability observed SEPARATELY from the record.
         if (_core.totalEscrow() != _expectedEscrow) {
             return false; // an escrow write already preceded the trust read
         }
@@ -350,10 +356,9 @@ contract LegacyLpToken {
     constructor(address minter_) {
         minter = minter_;
     }
-
-    function setMinter(address minter_) external {
-        minter = minter_;
-    }
+    // CX-MOCK-PRUNE: the unused `setMinter` fixture setter was removed after
+    // confirming no retained witness in the bound inventory calls it; the
+    // constructor-established minter keeps the two-crypto legacy shape.
 }
 
 /// @title PoisonAddController

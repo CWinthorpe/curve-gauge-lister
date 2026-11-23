@@ -482,14 +482,18 @@ contract TrustedFactoryTest is TrustedFactoryFixture {
         registry.setGauge(c.pool, c.slot, 0, c.gauge, int128(0));
     }
 
-    /// @dev Added matrix cell (S04): a test-only validator OBSERVES the
-    /// candidate's listing record and the core's aggregate liability DURING
-    /// the admission read and accepts only while both match the armed
-    /// pre-write state. Cell 1 arms (Unlisted, escrow 0): the honest call is
-    /// admitted, so the acceptance itself is the mid-read observation of
-    /// pre-write state. Cell 2 arms the opposite expectation (escrow FEE,
-    /// i.e. the writes already happened) against an identical fresh world:
-    /// the read observes the true pre-write state, returns canonical false
+    /// @dev Added matrix cell (S04; complete-observation form per CX-TRUST):
+    /// a test-only validator OBSERVES the candidate's COMPLETE public
+    /// `getListing` record (one keccak over the whole Listing — status and
+    /// aggregate alone do not distinguish other already-written fields) and
+    /// SEPARATELY the core's aggregate liability DURING the admission read,
+    /// accepting only while both match the armed world. Cell 1 arms the
+    /// pre-write world (all-zero Unlisted record hash, escrow 0): the honest
+    /// call is admitted, so the acceptance itself is the mid-read observation
+    /// of pre-write state. Cell 2 arms the complementary POST-WRITE world —
+    /// the full written record (Active, fee/escrow cells, platform snapshot)
+    /// plus escrow FEE — against an identical fresh world: the read observes
+    /// the true pre-write state, matches neither, returns canonical false
     /// and the call reverts exactly UntrustedGauge. Together the cells make
     /// the ordering non-vacuous: a mutant moving the trust read after the
     /// StoredListing/totalEscrow writes flips which cell passes.
@@ -501,7 +505,11 @@ contract TrustedFactoryTest is TrustedFactoryFixture {
         CurveGaugeLister core_ = _deployCore(address(ctl), address(pv), address(pm), address(obs));
         _bindAndUnpause(core_, ctl, address(pv), address(pm));
         Candidate memory c = _observingCandidate();
-        obs.arm(address(core_), c.gauge, 0);
+        // Pre-write world: the law's expectation is the ALL-ZERO Unlisted
+        // record (status Unlisted zeroes every monetary/display cell) —
+        // stated independently of the implementation's own read.
+        CurveGaugeLister.Listing memory preWrite;
+        obs.arm(address(core_), c.gauge, keccak256(abi.encode(preWrite)), 0);
         crvUSD.mint(payer, FEE_AMOUNT);
         World memory w = World({core_: core_, ctl: ctl, pv: pv, pm: pm});
         (bool ok, bytes memory ret) = _paidCall(w, payer, c);
@@ -518,9 +526,29 @@ contract TrustedFactoryTest is TrustedFactoryFixture {
         CurveGaugeLister core2 = _deployCore(address(ctl2), address(pv2), address(pm2), address(obs2));
         _bindAndUnpause(core2, ctl2, address(pv2), address(pm2));
         Candidate memory c2 = _observingCandidate();
-        // Arm the POST-WRITE expectation: the honest product must fail here;
-        // only a mutant that writes before reading would pass.
-        obs2.arm(address(core2), c2.gauge, FEE_AMOUNT);
+        // Arm the complementary POST-WRITE world: the complete record a
+        // mutant that writes before reading would observe (paid-lane values
+        // from the fixture law: exact fee, full remaining, configured
+        // 5000-bps snapshot, floored listing epoch of this block) plus the
+        // FEE liability. The honest product must fail here; only a mutant
+        // that writes before reading would pass.
+        CurveGaugeLister.Listing memory postWrite;
+        postWrite.pool = c2.pool;
+        postWrite.lpToken = c2.lp;
+        postWrite.payer = payer;
+        postWrite.admissionRegistry = address(registry);
+        postWrite.gaugeType = int128(0);
+        postWrite.listingEpoch = (block.timestamp / WEEK) * WEEK;
+        postWrite.status = CurveGaugeLister.Status.Active;
+        postWrite.epochsReleased = 0;
+        postWrite.deposited = FEE_AMOUNT;
+        postWrite.remaining = FEE_AMOUNT;
+        postWrite.released = 0;
+        postWrite.confiscated = 0;
+        postWrite.votium = address(pv2);
+        postWrite.voteMarket = address(pm2);
+        postWrite.votiumBps = 5000;
+        obs2.arm(address(core2), c2.gauge, keccak256(abi.encode(postWrite)), FEE_AMOUNT);
         crvUSD.mint(payer, FEE_AMOUNT);
         World memory w2 = World({core_: core2, ctl: ctl2, pv: pv2, pm: pm2});
         (bool nok, bytes memory nret) = _paidCall(w2, payer, c2);

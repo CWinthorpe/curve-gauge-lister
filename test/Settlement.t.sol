@@ -441,23 +441,28 @@ contract SettlementTest is TestBase {
         assertEq(token.allowance(address(lister), address(voteMarket)), 0, "voteMarket allowance cleared");
 
         // Mode 2: receipt without pulling -> whole quarter rolls back.
+        // CX-NEG: name the exact checked rejection — the core's exact-debit
+        // comparison, with the failing platform as argument. Full rollback
+        // assertions below stay in place.
         votium.setFailureMode(2);
         vm.warp(maturity + WEEK);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(CurveGaugeLister.PlatformDeltaMismatch.selector, address(votium)));
         lister.checkpoint(gauge);
         assertFaultRollback(gauge, 1);
-        // Mode 3: underpull by one unit.
+        // Mode 3: underpull by one unit — the same named exact-debit error
+        // (the receipt shape is valid; the custody delta is what fails).
         votium.setFailureMode(3);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(CurveGaugeLister.PlatformDeltaMismatch.selector, address(votium)));
         lister.checkpoint(gauge);
         assertFaultRollback(gauge, 1);
-        // Mode 4: pull then zero receipt.
+        // Mode 4: pull then zero receipt — the zero-receipt guard fires
+        // BEFORE the debit comparison, named exactly with its platform.
         votium.setFailureMode(4);
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(CurveGaugeLister.PlatformReceiptMissing.selector, address(votium)));
         lister.checkpoint(gauge);
         assertFaultRollback(gauge, 1);
-        // Unknown modes revert at the setter.
-        vm.expectRevert();
+        // Unknown modes revert at the setter with the mock's own named error.
+        vm.expectRevert(MockIncentivePlatform.UnknownFailureMode.selector);
         votium.setFailureMode(5);
 
         votium.setFailureMode(0);
@@ -533,12 +538,32 @@ contract SettlementTest is TestBase {
     address internal poolK_;
     address internal gaugeK_;
 
-    /// @dev exec7 (E7.2): at least two quarters due in ONE checkpoint; the
-    /// FIRST quarter's final positive-share endpoint (VoteMarket in the normal
-    /// mixed split) flips the gauge flag true mid-call. Quarter one stands,
-    /// the loop stops, the exact remainder goes to the FeeDistributor, and
-    /// raw controller weight stays explicitly nonzero throughout.
+    /// @dev exec7 (E7.2): at least two quarters due in ONE checkpoint; a
+    /// quarter-one callback flips the gauge flag true mid-call. Quarter one
+    /// stands, the loop stops, the exact remainder goes to the FeeDistributor,
+    /// and raw controller weight stays explicitly nonzero throughout.
+    /// Extended (CX-QUARTER) to observe the flag change at BOTH legs of the
+    /// flipping quarter: the existing final-leg cell (VoteMarket, the last
+    /// positive-share endpoint of the normal mixed split) and the complementary
+    /// first-leg cell (Votium, the first endpoint). The kill-observation unit
+    /// is the quarter, not the leg: after the quarter-boundary read there is
+    /// no flag read between the two legs, so a mid-first-leg flip must still
+    /// commit the quarter's second leg and is only observed at the NEXT
+    /// quarter boundary. Both cells carry the identical complete outcome
+    /// expectations (pre-due checks, no-skip chronology, both-leg atomicity,
+    /// later flag faults, whole-checkpoint rollback stay covered by the
+    /// separate read-fault and FD-failure witnesses).
     function test_KilledFlagTrueAtMaturityStopsMidCatchUp() public {
+        _midCatchUpFlipCell(false);
+        _midCatchUpFlipCell(true);
+    }
+
+    /// @dev One complete mid-catch-up cell on a fresh isolated world
+    /// (storage-backed for stack depth). `flipOnFirstLeg` selects which of
+    /// quarter one's two positive-share endpoints carries the kill callback;
+    /// everything else — including the full post-checkpoint expectations — is
+    /// byte-identical between the cells.
+    function _midCatchUpFlipCell(bool flipOnFirstLeg) private {
         ctlB_ = new MockListingController(controllerDao, int128(2));
         fdLive_ = new MockFeeDistributor(address(token), fdAdmin, T0);
         pv_ = new MockIncentivePlatform(address(token));
@@ -576,15 +601,22 @@ contract SettlementTest is TestBase {
 
         DaoKillCallback killer = new DaoKillCallback();
         killer.arm(address(ctlB_), controllerDao);
-        pm_.setReentry(address(killer), abi.encodeCall(DaoKillCallback.killNow, (gaugeK_)));
+        MockIncentivePlatform flipVenue = flipOnFirstLeg ? pv_ : pm_;
+        flipVenue.setReentry(address(killer), abi.encodeCall(DaoKillCallback.killNow, (gaugeK_)));
         vm.warp(tK + 2 * WEEK);
         vm.recordLogs();
         (uint256 releasedNow, uint256 confiscatedNow) = lb_.checkpoint(gaugeK_);
         Vm.Log[] memory logs = vm.getRecordedLogs();
         // Assert callback success BEFORE clearing it: clearing resets the
         // observation (E7.1.4).
-        assertTrue(pm_.reentrySucceeded(), "flag flip executed from the quarter-one callback");
+        assertTrue(
+            flipVenue.reentrySucceeded(),
+            flipOnFirstLeg
+                ? "flag flip executed from the quarter-one FIRST-leg callback; the second leg still commits as a unit"
+                : "flag flip executed from the quarter-one callback"
+        );
         pm_.setReentry(address(0), "");
+        pv_.setReentry(address(0), "");
         assertEq(releasedNow, QUARTER, "quarter one funds before the mid-catch-up flag");
         assertEq(confiscatedNow, FEE - QUARTER, "quarter two remainder confiscated");
         assertEq(ctlB_.get_gauge_weight(gaugeK_), 777, "raw weight unchanged and nonzero through the kill");
