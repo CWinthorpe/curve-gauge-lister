@@ -47,7 +47,11 @@ contract ListerCaller {
         SafeToken.forceApprove(token, address(platform), amount);
         receipt = platform.deposit(gauge, scheduledEpoch, amount);
         if (receipt == bytes32(0)) revert ReceiptMissing();
-        if (balBefore - IERC20Minimal(token).balanceOf(address(this)) != amount) revert DeltaMismatch();
+        uint256 balAfter = IERC20Minimal(token).balanceOf(address(this));
+        // Directional exact-delta check: direction before subtracting, so an
+        // opposite-direction observation surfaces via DeltaMismatch, never a
+        // Panic (mirrors core `_fundPlatform`).
+        if (balAfter > balBefore || balBefore - balAfter != amount) revert DeltaMismatch();
         SafeToken.forceApprove(token, address(platform), 0);
     }
 

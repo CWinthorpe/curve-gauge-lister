@@ -1033,10 +1033,14 @@ abstract contract ForkFixture is TestBase {
     /// @dev Exact Votium-side Approval/Transfer evidence for `times` deposits
     /// of `gross`: the pull (lister->adapter, bounded approval = gross), the
     /// venue's own net/fee transfers out of the adapter, and the adapter's
-    /// bounded approval lifecycle — `forceApprove` is zero-then-exact, so each
-    /// deposit emits the zero reset, the EXACT-gross set and the post-deposit
-    /// zero-clear (3 zero events + 1 gross event per deposit) — with a
-    /// standing rejection of any unlimited approval (R8-1).
+    /// bounded approval lifecycle — `forceApprove` is zero-then-exact with the
+    /// zero request collapsed to ONE checked zero approval, so each deposit
+    /// emits the zero reset, the EXACT-gross set, the venue's own
+    /// full-consumption allowance-zero event from its transferFrom, and the
+    /// single post-deposit clear (3 zero events + 1 gross event per deposit —
+    /// the duplicate clear trace is gone; this expectation is the checked
+    /// witness, not a claim of identical token logs) — with a standing
+    /// rejection of any unlimited approval (R8-1).
     function _assertVotiumLegEvents(Trio memory t, FVm.Log[] memory logs, uint256 gross, uint64 times) internal view {
         uint256 fee = (gross * IVotiumVenue(VOTIUM).platformFee()) / IVotiumVenue(VOTIUM).DENOMINATOR();
         assertEq(
@@ -1056,9 +1060,10 @@ abstract contract ForkFixture is TestBase {
         );
         assertEq(_tokenTransferCount(logs, address(t.va), VOTIUM, gross - fee), times, "votium leg: exact net transfer");
         assertEq(_tokenApprovalCount(logs, address(t.va), VOTIUM, gross), times, "votium leg: bounded approval = gross");
-        assertTrue(
-            _tokenApprovalCount(logs, address(t.va), VOTIUM, 0) >= times,
-            "votium leg: zero-reset + post-deposit clears present"
+        assertEq(
+            _tokenApprovalCount(logs, address(t.va), VOTIUM, 0),
+            3 * times,
+            "votium leg: zero-reset + venue-consumed allowance zero + single checked clear"
         );
         assertEq(_tokenApprovalCount(logs, address(t.va), VOTIUM, type(uint256).max), 0, "votium leg: never unlimited");
     }

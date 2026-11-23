@@ -306,13 +306,16 @@ contract CurveGaugeLister {
         // (that adapter rejects the second same-gauge/same-epoch deposit, so a
         // frozen listing under it could never release). When both shares are
         // positive the endpoints must differ. 0/10000 single-share configs keep
-        // the zero address allowed for the never-called side.
-        if (uint256(cfg.votiumBps) > 0 && uint256(cfg.votiumBps) < BPS && cfg.votium == cfg.voteMarket) {
+        // the zero address allowed for the never-called side. Call predicates
+        // come from the one computed split (S11): an interior basis-point leg
+        // is positive exactly when its share amount is nonzero.
+        (uint256 votiumAmount, uint256 voteMarketAmount) = _quarterSplit(cfg.votiumBps);
+        if (votiumAmount > 0 && voteMarketAmount > 0 && cfg.votium == cfg.voteMarket) {
             revert BadPlatformConfig();
         }
         // A zero-share destination may be the zero address and is never called.
-        if (uint256(cfg.votiumBps) > 0) _validatePlatformTarget(cfg.votium, token);
-        if (BPS - uint256(cfg.votiumBps) > 0) _validatePlatformTarget(cfg.voteMarket, token);
+        if (votiumAmount > 0) _validatePlatformTarget(cfg.votium, token);
+        if (voteMarketAmount > 0) _validatePlatformTarget(cfg.voteMarket, token);
     }
 
     function _validatePlatformTarget(address platform, address token) private view {
@@ -332,8 +335,9 @@ contract CurveGaugeLister {
     /// unbound future endpoints remains permitted; readiness is enforced on
     /// every paid admission, including after configuration changes.
     function _requirePlatformsReady(PlatformConfig memory cfg) private view {
-        if (cfg.votiumBps > 0) _requirePlatformReady(cfg.votium);
-        if (cfg.votiumBps < BPS) _requirePlatformReady(cfg.voteMarket);
+        (uint256 votiumAmount, uint256 voteMarketAmount) = _quarterSplit(cfg.votiumBps);
+        if (votiumAmount > 0) _requirePlatformReady(cfg.votium);
+        if (voteMarketAmount > 0) _requirePlatformReady(cfg.voteMarket);
     }
 
     /// @dev A decoded different bound lister — including zero — reverts
@@ -603,6 +607,13 @@ contract CurveGaugeLister {
 
     /// @notice Return the complete record; unknown returns the all-zero Unlisted
     /// record.
+    /// @dev Single documented materialization point of the public tuple (S14):
+    /// every derived monetary display cell comes from the shared funded-amount
+    /// helper below. Field order, provenance (the record's own stored fields),
+    /// Active-only `remaining`, zero Unlisted/DAO monetary fields, terminal
+    /// amounts and the explicit aggregate liability `totalEscrow` are all
+    /// preserved. Custody can include donations: neither balance nor a
+    /// matured-due figure may be substituted for these amounts.
     function getListing(address gauge) external view returns (Listing memory) {
         Listing memory result;
         StoredListing storage rec = _listings[gauge];
@@ -616,7 +627,7 @@ contract CurveGaugeLister {
         result.epochsReleased = rec.epochsReleased;
         if (rec.status != Status.Unlisted && rec.status != Status.DaoExempt) {
             result.deposited = FEE;
-            result.released = QUARTER * uint256(rec.epochsReleased);
+            result.released = _releasedAmount(rec.epochsReleased);
             result.remaining = _remaining(rec);
             if (rec.status == Status.Confiscated) result.confiscated = FEE - result.released;
         }
@@ -626,8 +637,16 @@ contract CurveGaugeLister {
         return result;
     }
 
+    /// @dev Single-source gross amount already funded for a record's funded
+    /// quarter count (S14): shared by the Active-only remainder and the
+    /// public display above. A matured-due count is a different quantity
+    /// (see `_maturedUnpaid`) and never substitutes for it.
+    function _releasedAmount(uint8 epochsReleased) private pure returns (uint256) {
+        return QUARTER * uint256(epochsReleased);
+    }
+
     function _remaining(StoredListing storage rec) private view returns (uint256) {
-        return rec.status == Status.Active ? FEE - QUARTER * uint256(rec.epochsReleased) : 0;
+        return rec.status == Status.Active ? FEE - _releasedAmount(rec.epochsReleased) : 0;
     }
 
     /// @notice Return current future-admission configuration.
@@ -761,11 +780,23 @@ contract CurveGaugeLister {
         // LP token cannot use the native sentinel: enforced by its code check.
     }
 
+    /// @dev One computed split of one gross QUARTER (S11): Votium takes the
+    /// basis-point floor, VoteMarket the remainder. The same amounts are the
+    /// single source of truth for which destinations are read or called —
+    /// zero share means never read, never called — at prospective
+    /// configuration validation, admission binding-readiness and frozen-record
+    /// routing. The current constants make every interior basis-point leg
+    /// positive, so amount-derived predicates match the historical bps
+    /// predicates; split-bound validation stays first at both validation sites.
+    function _quarterSplit(uint16 votiumBps) private pure returns (uint256 votiumAmount, uint256 voteMarketAmount) {
+        votiumAmount = (QUARTER * uint256(votiumBps)) / BPS;
+        voteMarketAmount = QUARTER - votiumAmount; // remainder to VoteMarket
+    }
+
     /// @dev Route one matured quarter's gross split using this gauge's immutable
     /// snapshot (plan §7). Every failure reverts the entire checkpoint.
     function _routeQuarter(address gauge, StoredListing storage rec, uint256 scheduledEpoch) private {
-        uint256 votiumAmount = (QUARTER * uint256(rec.votiumBps)) / BPS;
-        uint256 voteMarketAmount = QUARTER - votiumAmount; // remainder to VoteMarket
+        (uint256 votiumAmount, uint256 voteMarketAmount) = _quarterSplit(rec.votiumBps);
         // Zero-amount destinations are skipped altogether (never called).
         if (votiumAmount > 0) _fundPlatform(gauge, rec.votium, scheduledEpoch, votiumAmount);
         if (voteMarketAmount > 0) _fundPlatform(gauge, rec.voteMarket, scheduledEpoch, voteMarketAmount);
@@ -780,7 +811,10 @@ contract CurveGaugeLister {
         bytes32 receipt = IIncentivePlatform(platform).deposit(gauge, scheduledEpoch, amount);
         if (receipt == bytes32(0)) revert PlatformReceiptMissing(platform);
         uint256 balAfter = IERC20Minimal(crvUSD).balanceOf(address(this));
-        if (balBefore - balAfter != amount) revert PlatformDeltaMismatch(platform);
+        // Directional exact-delta check: test the delta direction before
+        // subtracting so an opposite-direction observation surfaces through
+        // the named error instead of an arithmetic Panic.
+        if (balAfter > balBefore || balBefore - balAfter != amount) revert PlatformDeltaMismatch(platform);
         SafeToken.forceApprove(crvUSD, platform, 0);
         emit PlatformDeposit(gauge, platform, scheduledEpoch, epochStart(block.timestamp), amount, receipt);
     }
@@ -828,13 +862,19 @@ contract CurveGaugeLister {
         totalEscrow -= amount;
 
         // Step 4: exact direct transfer with two-sided delta verification.
+        // Each side checks the delta direction before subtracting (an
+        // opposite-direction observation must surface through the named
+        // error, never an arithmetic Panic); the credit side stays in
+        // addition form.
         uint256 listerBefore = IERC20Minimal(crvUSD).balanceOf(address(this));
         uint256 fdBefore = IERC20Minimal(crvUSD).balanceOf(fd);
         SafeToken.safeTransfer(crvUSD, fd, amount);
-        if (IERC20Minimal(crvUSD).balanceOf(address(this)) != listerBefore - amount) {
+        uint256 listerAfter = IERC20Minimal(crvUSD).balanceOf(address(this));
+        if (listerAfter > listerBefore || listerBefore - listerAfter != amount) {
             revert ConfiscationDeltaMismatch();
         }
-        if (IERC20Minimal(crvUSD).balanceOf(fd) != fdBefore + amount) revert ConfiscationDeltaMismatch();
+        uint256 fdAfter = IERC20Minimal(crvUSD).balanceOf(fd);
+        if (fdAfter != fdBefore + amount) revert ConfiscationDeltaMismatch();
 
         // Step 5 (auditfix001 §3): mandatory atomic accounting in the SAME
         // transaction: call checkpoint_token directly, WITHOUT a swallowed

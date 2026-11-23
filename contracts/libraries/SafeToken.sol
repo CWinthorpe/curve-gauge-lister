@@ -4,9 +4,10 @@ pragma solidity 0.8.30;
 /// @title SafeToken
 /// @notice Safe low-level ERC20 calls: require token code; accept empty return
 /// data or ABI true, reject false/malformed returns, bubble/revert on failed
-/// calls. For approval use zero-then-exact-amount, and zero again after a
-/// successful deposit. Kept minimal and locally tested rather than introducing
-/// a runtime dependency.
+/// calls. For approval use zero-then-exact-amount; a zero request is one
+/// checked zero approval (the second zero call would be a redundant trace,
+/// not added safety), and the post-deposit clear is likewise one checked zero.
+/// Kept minimal and locally tested rather than introducing a runtime dependency.
 /// @dev No storage, constructor or public/external functions.
 library SafeToken {
     /// @dev Reverts when an ERC20 interaction is attempted against an address
@@ -32,9 +33,12 @@ library SafeToken {
     function forceApprove(address token, address spender, uint256 amount) internal {
         // An existing non-zero approval must be reset before the exact-amount
         // set; the zero step goes through the same safe path so a false/malformed
-        // approve cannot silently leave a dangling allowance.
+        // approve cannot silently leave a dangling allowance. A zero request is
+        // already satisfied by that checked zero approval — no duplicate trace.
         _call(token, abi.encodeWithSignature("approve(address,uint256)", spender, 0));
-        _call(token, abi.encodeWithSignature("approve(address,uint256)", spender, amount));
+        if (amount != 0) {
+            _call(token, abi.encodeWithSignature("approve(address,uint256)", spender, amount));
+        }
     }
 
     function _call(address token, bytes memory callData) private {
