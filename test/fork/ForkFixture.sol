@@ -1119,10 +1119,17 @@ abstract contract ForkFixture is TestBase {
     /// lifecycle as a COMPLETE owner/spender-scoped trace (CX-FORK-TRACE).
     /// `forceApprove` is zero-then-exact with the zero request collapsed to
     /// ONE checked zero approval (SafeToken), so per deposit the
-    /// lister->adapter pair shows the zero reset, the EXACT-gross set and
-    /// the legitimate token-generated allowance-zero from the adapter's own
-    /// transferFrom ([0, gross, 0]); the adapter->venue pair adds the single
-    /// post-deposit clear ([0, gross, 0, 0]). Bounding the full trace —
+    /// lister->adapter pair shows the pre-set zero reset, the EXACT-gross
+    /// set, the legitimate token-generated allowance-zero from the adapter's
+    /// own transferFrom, and the core's single post-deposit checked clear
+    /// ([0, gross, 0, 0]). The adapter->venue pair is where value-filtered
+    /// counts hid real structure (CX-FORK-TRACE's point): the live venue
+    /// pulls its fee and net reward as TWO transfers from the adapter, so
+    /// the allowance falls gross → gross-fee → 0 — the expected trace per
+    /// deposit is [0, gross, gross-fee, 0, 0] (zero reset, exact set, the
+    /// fee transfer's partial-consumption remaining, the net transfer's
+    /// consumption zero, and the adapter's single checked clear). Bounding
+    /// the full trace —
     /// exact multiplicity over every observed value, including a standing
     /// unlimited approval, which would match no expected entry (R8-1) —
     /// replaces the value-filtered counts: a count of one value does not
@@ -1142,16 +1149,18 @@ abstract contract ForkFixture is TestBase {
             "votium leg: exact fee transfer"
         );
         assertEq(_tokenTransferCount(logs, address(t.va), VOTIUM, gross - fee), times, "votium leg: exact net transfer");
-        uint256[] memory listerPair = new uint256[](3 * uint256(times));
-        uint256[] memory venuePair = new uint256[](4 * uint256(times));
+        uint256[] memory listerPair = new uint256[](4 * uint256(times));
+        uint256[] memory venuePair = new uint256[](5 * uint256(times));
         for (uint256 d = 0; d < uint256(times); ++d) {
-            listerPair[3 * d] = 0;
-            listerPair[3 * d + 1] = gross;
-            listerPair[3 * d + 2] = 0;
-            venuePair[4 * d] = 0;
-            venuePair[4 * d + 1] = gross;
-            venuePair[4 * d + 2] = 0;
-            venuePair[4 * d + 3] = 0;
+            listerPair[4 * d] = 0;
+            listerPair[4 * d + 1] = gross;
+            listerPair[4 * d + 2] = 0;
+            listerPair[4 * d + 3] = 0;
+            venuePair[5 * d] = 0;
+            venuePair[5 * d + 1] = gross;
+            venuePair[5 * d + 2] = gross - fee;
+            venuePair[5 * d + 3] = 0;
+            venuePair[5 * d + 4] = 0;
         }
         _assertApprovalTrace(logs, address(t.lister), address(t.va), listerPair, "votium leg: lister approval trace");
         _assertApprovalTrace(logs, address(t.va), VOTIUM, venuePair, "votium leg: bounded approval trace");

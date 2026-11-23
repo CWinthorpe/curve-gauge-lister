@@ -108,13 +108,14 @@ abstract contract ForkVoteMarketSpec is ForkFixture {
         // match the expected multiplicity; a count of one value does not
         // bound the others). Legitimate token-generated decrements from the
         // consuming transferFrom stay in the expected trace: per deposit the
-        // lister->adapter pair is [0, gross, 0] (zero reset, exact set,
-        // consumption) and the adapter->CRM pair is [0, gross, 0, 0] (adds
-        // the single post-call clear).
-        uint256[] memory listerTrace = new uint256[](3);
+        // lister->adapter pair is [0, gross, 0, 0] (zero reset, exact set,
+        // consumption, single checked clear) and the adapter->CRM pair is
+        // [0, gross, 0, 0] likewise.
+        uint256[] memory listerTrace = new uint256[](4);
         listerTrace[0] = 0;
         listerTrace[1] = gross;
         listerTrace[2] = 0;
+        listerTrace[3] = 0;
         uint256[] memory crmTrace = new uint256[](4);
         crmTrace[0] = 0;
         crmTrace[1] = gross;
