@@ -1016,16 +1016,21 @@ abstract contract ForkFixture is TestBase {
         }
     }
 
-    /// @dev CX-FORK-TRACE: complete, OWNER/SPENDER-SCOPED per-leg approval
-    /// evidence. Value-filtered counts alone do not bound every observed
-    /// approval — an unaccounted value for the SAME pair slips through a
-    /// count-only check. This helper asserts the full trace of the
-    /// (`ownerAddr`, `spender`) pair: every observed Approval event must
-    /// match one expected value with exact multiplicity, and every expected
-    /// value must be observed exactly once. Legitimate token-generated
-    /// decrements (the allowance-consumption zero emitted by the venue's own
-    /// transferFrom) are EXPECTED MEMBERS of the trace, never filtered out.
-    /// This is bounded-approval ingress evidence for the product-owned leg:
+    /// @dev CX-FORK-TRACE: complete, TOKEN/OWNER/SPENDER-SCOPED per-leg
+    /// approval evidence — a MULTISET over the observed log batch, not an
+    /// ordered trace. Value-filtered counts alone do not bound every
+    /// observed approval — an unaccounted value for the SAME pair slips
+    /// through a count-only check. This helper bounds the full set of
+    /// Approval events in scope (CRVUSD emitter, the three-topic Approval
+    /// shape, (`ownerAddr`, `spender`) pair, 32-byte data): every observed value
+    /// must match one expected entry with exact multiplicity, and every
+    /// expected entry must be exhausted exactly once. Permutations are
+    /// accepted — the caller's array lists expected members, not a temporal
+    /// order, and repeated deposits are not independently lifecycle-ordered
+    /// by this matcher. Legitimate token-generated decrements (the
+    /// allowance-consumption zero emitted by the venue's own transferFrom)
+    /// are EXPECTED MEMBERS of the multiset, never filtered out. This is
+    /// bounded-approval ingress evidence for the product-owned leg:
     /// it is not proof of venue delivery, and the final cleared allowance
     /// stays asserted separately (`_assertZeroApprovals`).
     function _assertApprovalTrace(
@@ -1116,24 +1121,29 @@ abstract contract ForkFixture is TestBase {
     /// @dev Exact Votium-side Approval/Transfer evidence for `times` deposits
     /// of `gross`: the pull (lister->adapter), the venue's own net/fee
     /// transfers out of the adapter, and the adapter's bounded-approval
-    /// lifecycle as a COMPLETE owner/spender-scoped trace (CX-FORK-TRACE).
+    /// evidence as a COMPLETE token/owner/spender-scoped MULTISET over the
+    /// observed log batch (CX-FORK-TRACE), not an ordered lifecycle trace.
     /// `forceApprove` is zero-then-exact with the zero request collapsed to
-    /// ONE checked zero approval (SafeToken), so per deposit the
-    /// lister->adapter pair shows the pre-set zero reset, the EXACT-gross
-    /// set, the legitimate token-generated allowance-zero from the adapter's
-    /// own transferFrom, and the core's single post-deposit checked clear
-    /// ([0, gross, 0, 0]). The adapter->venue pair is where value-filtered
-    /// counts hid real structure (CX-FORK-TRACE's point): the live venue
-    /// pulls its fee and net reward as TWO transfers from the adapter, so
-    /// the allowance falls gross → gross-fee → 0 — the expected trace per
-    /// deposit is [0, gross, gross-fee, 0, 0] (zero reset, exact set, the
-    /// fee transfer's partial-consumption remaining, the net transfer's
-    /// consumption zero, and the adapter's single checked clear). Bounding
-    /// the full trace —
-    /// exact multiplicity over every observed value, including a standing
-    /// unlimited approval, which would match no expected entry (R8-1) —
-    /// replaces the value-filtered counts: a count of one value does not
-    /// bound the others. This is ingress/custody evidence only, not proof of
+    /// ONE checked zero approval (SafeToken), so per deposit the expected
+    /// members for the lister->adapter pair are the pre-set zero reset, the
+    /// EXACT-gross set, the legitimate token-generated allowance-zero from
+    /// the adapter's own transferFrom, and the core's single post-deposit
+    /// checked clear — written as [0, gross, 0, 0]; the array lists expected
+    /// members, not a temporal order. The adapter->venue pair is where
+    /// value-filtered counts hid real structure (CX-FORK-TRACE's point): the
+    /// live venue pulls its fee and net reward as TWO transfers from the
+    /// adapter, so the allowance walks gross → gross-fee → 0 — the expected
+    /// members per deposit are [0, gross, gross-fee, 0, 0] (zero reset,
+    /// exact set, the fee transfer's partial-consumption remaining, the net
+    /// transfer's consumption zero, and the adapter's single checked clear),
+    /// again as multiset members rather than an ordering this matcher proves.
+    /// Bounding the full multiset —
+    /// exact exhaustion and multiplicity over every observed value,
+    /// including a standing unlimited approval, which would match no
+    /// expected entry (R8-1) — replaces the value-filtered counts: a count
+    /// of one value does not bound the others. Permutations are accepted;
+    /// repeated deposits are not independently lifecycle-ordered by this
+    /// matcher. This is ingress/custody evidence only, not proof of
     /// venue delivery; the final cleared allowances stay asserted separately
     /// by the callers' `_assertZeroApprovals`.
     function _assertVotiumLegEvents(Trio memory t, FVm.Log[] memory logs, uint256 gross, uint64 times) internal view {

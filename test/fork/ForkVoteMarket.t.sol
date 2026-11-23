@@ -104,10 +104,15 @@ abstract contract ForkVoteMarketSpec is ForkFixture {
         assertEq(_tokenTransferCount(logs, address(t.vma), CRM, gross), 1, "Transfer adapter->CRM");
         assertEq(_tokenTransferCount(logs, CRM, TOKEN_FACTORY, gross), 1, "Transfer CRM->TokenFactory (burn lock)");
         // CX-FORK-TRACE: the product-owned approval legs are bounded as
-        // COMPLETE owner/spender-scoped traces (every observed value must
-        // match the expected multiplicity; a count of one value does not
-        // bound the others). Legitimate token-generated decrements from the
-        // consuming transferFrom stay in the expected trace: per deposit the
+        // COMPLETE token/owner/spender-scoped MULTISETS over the observed
+        // log batch (every observed value in the pair's scope must match an
+        // expected entry with exact multiplicity and every expected entry
+        // must be exhausted; a count of one value does not bound the
+        // others). Permutations are accepted: the arrays list expected
+        // members, not a temporal order, and repeated deposits are not
+        // independently lifecycle-ordered by this matcher. Legitimate
+        // token-generated decrements from the consuming transferFrom stay
+        // among the expected members: per deposit the
         // lister->adapter pair is [0, gross, 0, 0] (zero reset, exact set,
         // consumption, single checked clear) and the adapter->CRM pair is
         // [0, gross, 0, 0] likewise.

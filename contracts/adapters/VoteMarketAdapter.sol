@@ -12,20 +12,23 @@ import {CurveWeek} from "../libraries/CurveWeek.sol";
 /// @title VoteMarketAdapter
 /// @notice Real-platform adapter funding VoteMarket v2 (Stake DAO) campaigns
 /// from the CurveGaugeLister escrow via the L1 CampaignRemoteManager
-/// (plan §7, docs/INTEL-YB-HELPERS.md §3.3). One deposit creates exactly one
-/// gauge-bound campaign: pull EXACTLY `amount` of the immutable crvUSD from
-/// the bound lister, bounded-approve the CampaignRemoteManager for EXACTLY
-/// `amount`, call `createCampaign{value: additionalGasLimit * gasPrice}` with
-/// params bound to (block.chainid, gauge, manager = this adapter, crvUSD,
-/// numberOfPeriods = 2, configured cap/amount/exclusions, hook = 0, isWhitelist
-/// = false) toward destination chain 42161, clear the approval to zero, and
-/// record the deposit with a receipt.
+/// (plan §7, docs/INTEL-YB-HELPERS.md §3.3). One deposit makes ONE funded
+/// gauge-bound L1 request submission toward the CampaignRemoteManager; it
+/// does not itself create a campaign: pull EXACTLY `amount` of the immutable
+/// crvUSD from the bound lister, bounded-approve the CampaignRemoteManager
+/// for EXACTLY `amount`, call `createCampaign{value: additionalGasLimit *
+/// gasPrice}` with params bound to (block.chainid, gauge, manager = this
+/// adapter, crvUSD, numberOfPeriods = 2, configured cap/amount/exclusions,
+/// hook = 0, isWhitelist = false) toward destination chain 42161, clear the
+/// approval to zero, and record the deposit with a receipt.
 /// @dev Deliberate deviations from the AGPL-3.0 YB DepositHelperVoteMarket
 /// (INTEL §4): the call is reimplemented from the verified ABI, not copied.
 /// There is NO owner `execute()` / `withdrawEther` / ETH-rescue surface at
 /// all: `receive()` accepts the ops ETH float from anyone, but nothing can
 /// take ETH back out. Consequently the adapter verifies within each deposit
-/// that the full pulled crvUSD left custody to the CampaignRemoteManager.
+/// the exact adapter-side pull credit and that its own crvUSD balance
+/// returned to the pre-deposit baseline — adapter-side balance observations,
+/// not a separately measured recipient credit to the CampaignRemoteManager.
 /// Insufficient ETH for the cross-chain gas makes the whole deposit revert,
 /// which rolls back the enclosing checkpoint — a quarter is never silently
 /// skipped (core requires exact funding; same semantics as the mocks).
@@ -218,9 +221,12 @@ contract VoteMarketAdapter is IIncentivePlatform, AdapterOwnable {
         SafeToken.forceApprove(crvUSD, campaignRemoteManager, 0);
 
         // No token or ETH withdrawal surface exists here, so custody must be
-        // complete inside the deposit itself: every pulled unit has to have
-        // reached the CampaignRemoteManager in this same call (shared
-        // baseline predicate, own error and position, CX-ADAPTER).
+        // complete inside the deposit itself: with the exact pull credit
+        // checked above, this observes the adapter's own crvUSD balance
+        // returning to its pre-deposit baseline — the adapter retains
+        // nothing. It is a balance-baseline observation, not a separately
+        // measured recipient credit (shared baseline predicate, own error
+        // and position, CX-ADAPTER).
         if (!AdapterCustody.custodyClearedToBaseline(balBefore, IERC20Minimal(crvUSD).balanceOf(address(this)))) {
             revert PlatformUnderpull();
         }

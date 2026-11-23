@@ -69,6 +69,19 @@ For a stale FD, keep new confiscation money in escrow. A separate refresh is dem
 
 New adapter construction checks nonzero arguments first, then code at crvUSD and the local Votium/CRM ingress. The manager may be an EOA. The remote VoteMarket address is nonzero but deliberately not checked for L1 code; verify it on chain 42161. These guards do not prove endpoint identity or availability.
 
+Custody/attestation observation boundary: the core's funding check observes
+the exact lister-side source debit plus a nonzero adapter attestation
+(receipt) — it is not a recipient-credit check; each adapter separately
+observes the exact pull credit into its own balance and the return of that
+balance to its pre-deposit baseline — an adapter-side observation, not a
+measured credit at the venue. Destination facts come from the pinned ingress
+record plus independent venue evidence (fork observations, balance deltas),
+never from either balance check alone. The confiscation path is the one place
+the lister itself checks both sides of a single transfer: exact lister debit
+and exact FeeDistributor credit. Common receipt meaning stays defined at
+`IIncentivePlatform.deposit`; this paragraph records the observation boundary
+only and adds no new receipt specification.
+
 For VoteMarket base B>0, per-exclusion X and price P>0, with U=type(uint256).max, `setGasSettings` requires `X <= (U-B)/50` and then `P <= U/(B+50*X)`. Equality and X=0 are permitted; all future list lengths 0..50 are protected. Rejection is BadGasSettings before storage/event changes, not arithmetic Panic. Defaults are base2,000,000, per-exclusion50,000 and price1gwei. This is arithmetic safety, not a live quote or affordability cap.
 
 `ethDeficit(amount>0)` quotes ONE message's configured funding shortfall, independent of token amount; `ethDeficit(0)==0` is a deliberate no-message query. Quote and deposit execution share ONE named priced-message calculation (`_oneMessageEthRequirement`: the current one-message bridge-gas limit times the configured gas price), so they cannot price differently under identical settings. A positive return is not funding readiness and not a quote conditioned on the core's binding — it prices one message under current settings while a catch-up may require several messages. Returned unused bridge ETH stays in reusable committed float, so call value need not equal net expenditure. There is no operator withdrawal/rescue of the float.

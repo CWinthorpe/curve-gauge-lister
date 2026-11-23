@@ -32,8 +32,12 @@ import {AdapterCustody} from "../libraries/AdapterCustody.sol";
 /// boomerang property is accepted and no voter blacklist is introduced.
 /// The deposit address is constructor-bound so no owner action can ever
 /// redirect token approvals; there is no token withdrawal path, so the
-/// adapter verifies within every deposit that the full pulled amount actually
-/// left custody.
+/// adapter verifies within every deposit the exact pull credit and that its
+/// own crvUSD balance returned to the pre-deposit baseline. Those are
+/// adapter-side balance observations, not a separately measured recipient
+/// credit, and no promise that every gross unit became a net venue reward
+/// (the pinned venue's fee/net split is evidenced independently in the fork
+/// suite).
 contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
     /// @notice Immutable fee/reward token; the only token this adapter moves.
     address public immutable crvUSD;
@@ -158,9 +162,13 @@ contract VotiumAdapter is IIncentivePlatform, AdapterOwnable {
         SafeToken.forceApprove(crvUSD, votium, 0);
 
         // No withdrawal surface exists in this adapter, so custody must be
-        // complete inside the deposit itself: every pulled unit has to have
-        // reached the platform in this same call (shared baseline predicate,
-        // own error and position, CX-ADAPTER).
+        // complete inside the deposit itself: with the exact pull credit
+        // checked above, this observes the adapter's own crvUSD balance
+        // returning to its pre-deposit baseline — the adapter retains
+        // nothing. It is a balance-baseline observation, not a separately
+        // measured recipient credit and not a gross-equals-net venue
+        // promise (shared baseline predicate, own error and position,
+        // CX-ADAPTER).
         if (!AdapterCustody.custodyClearedToBaseline(balBefore, IERC20Minimal(crvUSD).balanceOf(address(this)))) {
             revert PlatformUnderpull();
         }

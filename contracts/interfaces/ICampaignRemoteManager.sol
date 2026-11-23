@@ -27,7 +27,10 @@ interface ICampaignRemoteManager {
         bool isWhitelist;
     }
 
-    /// @notice Fund and register an L2 campaign. On the verified manager
+    /// @notice Submit funded ingress toward an L2 campaign: this call is a
+    /// funded L1 request submission; registration, acceptance and funding
+    /// on L2 are destination-side facts, not established by this call's
+    /// success. On the verified manager
     /// (C1:1749-1781) the ingress guards are `block.chainid == 1` and a
     /// whitelisted `votemarket` platform; the manager then pulls
     /// `params.totalRewardAmount` of `params.rewardToken` from the caller and

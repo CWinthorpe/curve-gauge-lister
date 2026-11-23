@@ -2,9 +2,13 @@
 pragma solidity 0.8.30;
 
 /// @title SafeToken
-/// @notice Safe low-level ERC20 calls: require token code; accept empty return
-/// data or ABI true, reject false/malformed returns, bubble/revert on failed
-/// calls. For approval use zero-then-exact-amount; a zero request is one
+/// @notice Safe low-level ERC20 calls: require token code; accept empty
+/// return data or a canonical 32-byte ABI true word. A `false` return or a
+/// nonempty wrong-length return reaches `SafeTokenBadReturn`; a length-32
+/// word that is not a canonical Boolean can revert inside `abi.decode`
+/// before that custom error is reached. A failed low-level call is wrapped
+/// in `SafeTokenCallFailed` — dependency revert bytes are not bubbled.
+/// For approval use zero-then-exact-amount; a zero request is one
 /// checked zero approval (the second zero call would be a redundant trace,
 /// not added safety), and the post-deposit clear is likewise one checked zero.
 /// Kept minimal and locally tested rather than introducing a runtime dependency.
@@ -14,10 +18,14 @@ library SafeToken {
     /// without deployed code.
     error SafeTokenNoCode(address token);
 
-    /// @dev Reverts when a token call fails outright.
+    /// @dev Reverts when a token call fails outright: the low-level failure
+    /// is wrapped here; dependency revert bytes are not bubbled through.
     error SafeTokenCallFailed(address token);
 
-    /// @dev Reverts when a token call returns malformed (non-empty, non-true) data.
+    /// @dev Reverts when a token call returns malformed (non-empty, non-true)
+    /// data: a `false` return or a nonempty wrong-length return reaches this
+    /// error. A length-32 noncanonical Boolean word may instead revert during
+    /// `abi.decode` before this custom error is reached.
     error SafeTokenBadReturn(address token);
 
     function safeTransfer(address token, address to, uint256 amount) internal {

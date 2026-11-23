@@ -78,6 +78,15 @@ Shared errors:
 
 `SafeTokenBadReturn(address token)`, `SafeTokenCallFailed(address token)`, `SafeTokenNoCode(address token)`.
 
+Shared-token error boundary: a successful call returning empty data, or a
+canonical 32-byte `true` word, is accepted. A `false` return, or any nonempty
+return whose length is not exactly 32 bytes, reaches `SafeTokenBadReturn`. A
+length-32 word that is not a canonical Boolean can revert inside the decoder
+before `SafeTokenBadReturn` is reached. A failed low-level call is wrapped in
+`SafeTokenCallFailed`; dependency revert bytes are not bubbled through.
+`SafeTokenNoCode` covers an interaction attempted against an address without
+deployed code.
+
 The new getter selector is `trustedGaugeValidator() = 0x3ca09961`. The only validator predicate used is `validateGauge(address) = 0xe92cd3d3`, with the candidate gauge as its argument. A successful exact-32-byte zero returns `UntrustedGauge(address) = 0x6c706dca`; call failure, nonexact length or a word greater than one returns `TrustedGaugeCheckFailed(address) = 0x7835e9b7`. Only word one passes. The external validator's internal faults may collapse to false and therefore yield UntrustedGauge. Out-of-gas and other dependency ABI failures need not have a uniform custom error.
 
 ## Adapter interfaces and invariant boundary
