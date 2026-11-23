@@ -69,6 +69,16 @@ except Exception:
 
 # Failures flow through as MISSING into the strict comparisons below; the
 # run then exits nonzero with the BLOCKED: RPC label (fail-closed either way).
+#
+# CX-FORK-CLOCK: this preflight is the SELECTED-FORK-IDENTITY check — it
+# compares the RPC-returned pinned block header (hash/number/timestamp) and
+# chain id, fail-closed, BEFORE any test runs. It is separate from, and
+# neither substitutes for, the fixture-side checks in
+# test/fork/ForkFixture.sol `_freshFork`: (1) the in-EVM chain-id/block-
+# number assertions confirm what the node served this test builds on, and
+# (2) the optional timestamp warp is only a SCENARIO CLOCK RESTORATION after
+# earlier subcases warped the env clock. Header verification here is not a
+# clock restoration; clock restoration there is not header verification.
 CHAIN_HEX=$(extract "$(rpc_call eth_chainId '[]' || true)" "")
 BLOCK=$(rpc_call eth_getBlockByNumber "[\"${FORK_BLOCK_HEX}\",false]" || true)
 BLOCK_HASH=$(extract "$BLOCK" hash)

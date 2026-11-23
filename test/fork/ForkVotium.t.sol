@@ -110,22 +110,61 @@ abstract contract ForkVotiumSpec is ForkFixture {
         assertEq(_countLogs(logs, address(t.lister), T_PLATFORM_DEPOSIT), 1, "one PlatformDeposit");
         assertEq(_countLogs(logs, VOTIUM, T_NEW_INCENTIVE), 1, "real NewIncentive");
         assertEq(_countLogs(logs, address(t.va), T_VOTIUM_DEPOSIT), 1, "adapter VotiumDeposit once");
-        _assertPlatformDepositLog(logs, address(t.lister), k, address(t.va));
+        // One consolidated, owner-scoped trace walk for this leg
+        // (CX-FORK-TRACE): count alone is not field equality, so the
+        // PlatformDeposit topics AND data and the venue NewIncentive topics
+        // are bound by exact field comparison in a single pass.
+        _assertVotiumLegTrace(logs, address(t.lister), address(t.va), q);
         _assertLedger(t, GAUGE_PRIMARY, uint8(k + 1), k == 3);
         // R8-1: exact Votium-side approval/transfer amounts for this gross
         // share and its net/fee split (bounded-approval proof).
         _assertVotiumLegEvents(t, logs, QUARTER, 1);
-        // §6.1: the lister routes GROSS to the adapter; Votium itself splits
-        // net/fee. PlatformDeposit data.amount and the receipt use gross.
-        _assertReceipt(
-            logs,
-            address(t.lister),
-            q.ts,
-            QUARTER,
-            keccak256(abi.encode(GAUGE_PRIMARY, q.ts, QUARTER, q.round)),
-            q.round,
-            address(t.va)
-        );
+    }
+
+    /// @dev Single complete trace walk for one Votium-leg quarter
+    /// (CX-FORK-TRACE consolidation of the previous two loops). The
+    /// lister's PlatformDeposit topics (gauge, platform, scheduled epoch)
+    /// AND data (execution epoch at the matured boundary, routed amount,
+    /// receipt) are bound by field equality — an event count is not field
+    /// equality — and the venue's NewIncentive topics (round, gauge,
+    /// depositor) by the same walk. The receipt binds the routed GROSS
+    /// tuple (core release is GROSS; the venue's net/fee split is separate
+    /// venue accounting asserted via `_assertVotiumDeltas`, not a receipt
+    /// value; the adapter's Votium-side receipt is the keccak tuple over the
+    /// gross, not a post-fee amount). Nothing here asserts delivery.
+    function _assertVotiumLegTrace(FVm.Log[] memory logs, address lister, address adapterAddr, QPre memory q)
+        internal
+        view
+    {
+        bool seenDeposit;
+        bool seenIncentive;
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].emitter == lister && logs[i].topics.length == 4 && logs[i].topics[0] == T_PLATFORM_DEPOSIT) {
+                assertEq(address(uint160(uint256(logs[i].topics[1]))), GAUGE_PRIMARY, "deposit gauge");
+                assertEq(address(uint160(uint256(logs[i].topics[2]))), adapterAddr, "deposit platform = adapter");
+                assertEq(uint256(logs[i].topics[3]), q.ts, "deposit scheduled epoch");
+                (uint256 executionEpoch, uint256 amount, bytes32 receipt) =
+                    abi.decode(logs[i].data, (uint256, uint256, bytes32));
+                assertEq(executionEpoch, q.ts, "execution epoch (matured boundary)");
+                assertEq(
+                    amount, QUARTER, "adapter deposit equals the routed gross (core release is GROSS, not net of fee)"
+                );
+                assertEq(
+                    receipt,
+                    keccak256(abi.encode(GAUGE_PRIMARY, q.ts, QUARTER, q.round)),
+                    "receipt = keccak(gauge, scheduled, gross, round)"
+                );
+                seenDeposit = true;
+            }
+            if (logs[i].emitter == VOTIUM && logs[i].topics.length == 4 && logs[i].topics[0] == T_NEW_INCENTIVE) {
+                assertEq(uint256(logs[i].topics[1]), q.round, "NewIncentive round topic");
+                assertEq(address(uint160(uint256(logs[i].topics[2]))), GAUGE_PRIMARY, "NewIncentive gauge topic");
+                assertEq(address(uint160(uint256(logs[i].topics[3]))), adapterAddr, "NewIncentive depositor = adapter");
+                seenIncentive = true;
+            }
+        }
+        assertTrue(seenDeposit, "PlatformDeposit topics and data decoded");
+        assertTrue(seenIncentive, "real NewIncentive decoded");
     }
 
     /// @dev Pins of the live venue that this proof depends on (§6.1).
@@ -136,55 +175,6 @@ abstract contract ForkVotiumSpec is ForkFixture {
         assertEq(votium.platformFee(), VOTIUM_PLATFORM_FEE, "platform fee 2%");
         assertEq(votium.DENOMINATOR(), VOTIUM_DENOMINATOR, "denominator");
         assertEq(votium.feeAddress(), VOTIUM_FEE_ADDRESS, "fee address");
-    }
-
-    /// @dev Assert lister's PlatformDeposit event carries the expected
-    /// execution epoch, gross amount and receipt; Votium-side receipt value
-    /// is net after the venue fee.
-    function _assertPlatformDepositLog(FVm.Log[] memory logs, address emitter, uint256 k, address adapterAddr)
-        internal
-        pure
-    {
-        bool seen;
-        for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].emitter == emitter && logs[i].topics.length == 4 && logs[i].topics[0] == T_PLATFORM_DEPOSIT) {
-                assertEq(address(uint160(uint256(logs[i].topics[1]))), GAUGE_PRIMARY, "deposit gauge");
-                assertEq(address(uint160(uint256(logs[i].topics[2]))), adapterAddr, "deposit platform = adapter");
-                assertEq(uint256(logs[i].topics[3]), _maturity(k), "deposit scheduled epoch");
-                seen = true;
-            }
-        }
-        assertTrue(seen, "PlatformDeposit topics");
-    }
-
-    function _assertReceipt(
-        FVm.Log[] memory logs,
-        address emitter,
-        uint256 scheduledEpoch,
-        uint256 routedAmount,
-        bytes32 wantReceipt,
-        uint256 round,
-        address adapterAddr
-    ) internal pure {
-        bool seen;
-        for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].emitter == emitter && logs[i].topics.length == 4 && logs[i].topics[0] == T_PLATFORM_DEPOSIT) {
-                (uint256 executionEpoch, uint256 amount, bytes32 receipt) =
-                    abi.decode(logs[i].data, (uint256, uint256, bytes32));
-                assertEq(executionEpoch, scheduledEpoch, "execution epoch (matured boundary)");
-                assertEq(
-                    amount, routedAmount, "adapter deposit equals the routed gross (plan 6.1: core release = GROSS)"
-                );
-                assertEq(receipt, wantReceipt, "receipt = keccak(gauge, scheduled, gross, round)");
-                seen = true;
-            }
-            if (logs[i].emitter == VOTIUM && logs[i].topics.length == 4 && logs[i].topics[0] == T_NEW_INCENTIVE) {
-                assertEq(uint256(logs[i].topics[1]), round, "NewIncentive round topic");
-                assertEq(address(uint160(uint256(logs[i].topics[2]))), GAUGE_PRIMARY, "NewIncentive gauge topic");
-                assertEq(address(uint160(uint256(logs[i].topics[3]))), adapterAddr, "NewIncentive depositor = adapter");
-            }
-        }
-        assertTrue(seen, "PlatformDeposit receipt");
     }
 
     // ------------------------------------------------------------------

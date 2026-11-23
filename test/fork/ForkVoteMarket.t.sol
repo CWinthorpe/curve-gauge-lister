@@ -103,8 +103,29 @@ abstract contract ForkVoteMarketSpec is ForkFixture {
         assertEq(_tokenTransferCount(logs, address(t.lister), address(t.vma), gross), 1, "Transfer lister->adapter");
         assertEq(_tokenTransferCount(logs, address(t.vma), CRM, gross), 1, "Transfer adapter->CRM");
         assertEq(_tokenTransferCount(logs, CRM, TOKEN_FACTORY, gross), 1, "Transfer CRM->TokenFactory (burn lock)");
-        assertEq(_tokenApprovalCount(logs, address(t.lister), address(t.vma), gross), 1, "Approval lister->adapter");
-        assertEq(_tokenApprovalCount(logs, address(t.vma), CRM, gross), 1, "Approval adapter->CRM");
+        // CX-FORK-TRACE: the product-owned approval legs are bounded as
+        // COMPLETE owner/spender-scoped traces (every observed value must
+        // match the expected multiplicity; a count of one value does not
+        // bound the others). Legitimate token-generated decrements from the
+        // consuming transferFrom stay in the expected trace: per deposit the
+        // lister->adapter pair is [0, gross, 0] (zero reset, exact set,
+        // consumption) and the adapter->CRM pair is [0, gross, 0, 0] (adds
+        // the single post-call clear).
+        uint256[] memory listerTrace = new uint256[](3);
+        listerTrace[0] = 0;
+        listerTrace[1] = gross;
+        listerTrace[2] = 0;
+        uint256[] memory crmTrace = new uint256[](4);
+        crmTrace[0] = 0;
+        crmTrace[1] = gross;
+        crmTrace[2] = 0;
+        crmTrace[3] = 0;
+        _assertApprovalTrace(logs, address(t.lister), address(t.vma), listerTrace, "vma leg: lister approval trace");
+        _assertApprovalTrace(logs, address(t.vma), CRM, crmTrace, "vma leg: bounded approval trace");
+        // The third-party CRM->TokenFactory leg is a venue-internal pattern:
+        // the exact-gross approval is counted, the final cleared allowance
+        // and full custody movement are asserted below/above — no delivery
+        // claim is read from any of these observations.
         assertEq(_tokenApprovalCount(logs, CRM, TOKEN_FACTORY, gross), 1, "Approval CRM->TokenFactory");
         _assertZeroApprovals(t);
     }

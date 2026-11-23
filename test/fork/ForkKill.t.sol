@@ -434,14 +434,4 @@ abstract contract ForkKillSpec is ForkFixture {
         assertTrue(IGaugeVenue(GAUGE_PRIMARY).is_killed(), string.concat(label, ": flag stays true"));
         assertEq(uint256(t.lister.getListing(GAUGE_PRIMARY).status), 1, string.concat(label, ": still Active"));
     }
-
-    function _indexOf(FVm.Log[] memory logs, address emitter, bytes32 topic0) internal pure returns (uint256) {
-        for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].emitter == emitter && logs[i].topics.length > 0 && logs[i].topics[0] == topic0) {
-                return i;
-            }
-        }
-        assertTrue(false, "log index missing");
-        return 0;
-    }
 }

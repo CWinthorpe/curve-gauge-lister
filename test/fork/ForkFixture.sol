@@ -489,31 +489,19 @@ abstract contract ForkFixture is TestBase {
         return t.lister.confiscate(gauge);
     }
 
-    /// @dev Public releasable read by anyone.
-    function _keeperReleasable(Trio memory t, address gauge) internal view returns (uint256) {
-        return t.lister.releasable(gauge);
-    }
-
     // ------------------------------------------------------------------
     // Revert-probe helpers (try/catch so the test CONTINUES after the
     // expected revert and can assert complete state restoration; a plain
     // expectRevert would end the test frame at the reverting call).
+    // CX-FORK-SETUP: the never-referenced `_probeFreeListRevert`,
+    // `_probeGaugeKillRevert` and `_probeProxyKillRevert` helpers were
+    // pruned after confirming no scenario calls them; every retained probe
+    // checks material arguments/revert data (exact `want` bytes).
     // ------------------------------------------------------------------
 
     function _probeListGaugeRevert(Trio memory t, bytes memory want, string memory label) internal {
         fvm.prank(payer());
         try t.lister.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID) {
-            assertTrue(false, string.concat(label, " (expected revert, call succeeded)"));
-        } catch (bytes memory rd) {
-            _assertBytesEq(rd, want, label);
-        }
-    }
-
-    function _probeFreeListRevert(Trio memory t, address from, uint256 weight, bytes memory want, string memory label)
-        internal
-    {
-        fvm.prank(from);
-        try t.lister.listGaugeNoEscrow(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID, weight) {
             assertTrue(false, string.concat(label, " (expected revert, call succeeded)"));
         } catch (bytes memory rd) {
             _assertBytesEq(rd, want, label);
@@ -547,24 +535,6 @@ abstract contract ForkFixture is TestBase {
         }
     }
 
-    function _probeGaugeKillRevert(address from, bytes memory want, string memory label) internal {
-        fvm.prank(from);
-        try IGaugeVenue(GAUGE_PRIMARY).set_killed(true) {
-            assertTrue(false, string.concat(label, " (expected revert, call succeeded)"));
-        } catch (bytes memory rd) {
-            _assertBytesEq(rd, want, label);
-        }
-    }
-
-    function _probeProxyKillRevert(address from, bytes memory want, string memory label) internal {
-        fvm.prank(from);
-        try IProxyVenue(AMM_PROXY).set_killed(GAUGE_PRIMARY) {
-            assertTrue(false, string.concat(label, " (expected revert, call succeeded)"));
-        } catch (bytes memory rd) {
-            _assertBytesEq(rd, want, label);
-        }
-    }
-
     function _u(uint256 v) internal pure returns (string memory) {
         if (v == 0) return "0";
         uint256 n;
@@ -592,16 +562,32 @@ abstract contract ForkFixture is TestBase {
     }
 
     /// @dev Fresh fork at the pinned block + mandatory header assertions
-    /// (chain ID, block number, initial timestamp) before any mutation.
+    /// (CX-FORK-CLOCK): these are TWO SEPARATE checks and neither
+    /// substitutes for the other.
+    ///  (1) SELECTED FORK IDENTITY — the chain-id and block-number
+    ///      assertions below verify the node served the pinned chain/block
+    ///      this test builds on; the fail-closed ENDPOINT/HEADER selection
+    ///      is the scripts/test-fork.sh preflight (it compares the returned
+    ///      pinned block hash/number/timestamp over RPC and refuses to run
+    ///      the suite on any mismatch — the fixture's in-EVM view cannot
+    ///      replace that preflight because it only sees whatever the node
+    ///      served).
+    ///  (2) SCENARIO CLOCK RESTORATION — the optional warp and the
+    ///      timestamp assertion re-anchor the ENVIRONMENT clock to the
+    ///      pinned timestamp after an earlier subcase warped it (a
+    ///      mid-test fresh fork inherits the process-level env clock).
+    ///      Identity selection is not re-proved here; restoration does not
+    ///      re-anchor state reads, which stay pinned to FORK_BLOCK.
     function _freshFork() internal {
         fvm.createSelectFork(_rpc(), FORK_BLOCK);
-        // A mid-test fresh fork inherits the process-level env clock when an
-        // earlier subcase warped it; re-anchor to the pinned timestamp (an
-        // env-only repair — every state read stays pinned to FORK_BLOCK) so
-        // every test provably starts at the plan's timestamp.
+        // (2) Scenario clock restoration (env-only repair; every state read
+        // stays pinned to FORK_BLOCK) so every test provably starts at the
+        // plan's timestamp.
         if (block.timestamp != FORK_TIMESTAMP) {
             fvm.warp(FORK_TIMESTAMP);
         }
+        // (1) Selected fork identity as served by the node (separate from
+        // the shell preflight's header comparison above).
         assertEq(block.chainid, FORK_CHAIN_ID, "fork chain id");
         assertEq(block.number, FORK_BLOCK, "fork block number");
         assertEq(fvm.getBlockNumber(), FORK_BLOCK, "cheat fork block number");
@@ -643,20 +629,22 @@ abstract contract ForkFixture is TestBase {
         assertEq(keccak256(vcode), H_TRUSTED_VALIDATOR, "fork: validator runtime keccak");
     }
 
-    /// @dev Deploy the real product trio and bind BOTH adapters to this
-    /// lister through their owner-gated one-time `setLister` (auditfix001
-    /// §1/§7), under a narrowly scoped DAO prank — DAO is the real adapter
-    /// owner in these fixtures. Getter readback proves both bindings before
-    /// any seating, funding or listing write. §4/R8-4: read-only primary
-    /// provenance + code/kill-authority checks run BEFORE any seating,
-    /// funding or listing write this fixture can make. V1ALIGN: the live
-    /// validator pin identity is re-verified read-only before construction,
-    /// the core is wired to the ACTUAL pinned validator, and the owner
-    /// unpauses only after the bindings read back.
-    function _deployTrio(uint16 votiumBps) internal returns (Trio memory t) {
+    /// @dev ONE destination-parameterized trio constructor/binding proof
+    /// shared by both fork trio targets (CX-FORK-SETUP): primary via
+    /// `_deployTrio` (VM_DESTINATION), alternate via `_deployTrioAltVm`.
+    /// Preserved in full inside the shared body: §4/R8-4 read-only primary
+    /// provenance + code/kill-authority checks BEFORE any seating, funding
+    /// or listing write (auditfix001 §7); V1ALIGN validator-pin identity
+    /// re-verified read-only before construction with the core wired to the
+    /// ACTUAL pinned validator; the explicit S03 controller-pin assertion
+    /// (now applied to BOTH targets); owner-gated one-time DAO-scoped
+    /// bindings with getter readback; and the paused postcondition —
+    /// activation stays a SEPARATE explicit step (`_activatePaidAdmission`),
+    /// never folded into deploy.
+    function _deployTrioAt(uint16 votiumBps, address vmDestination) internal returns (Trio memory t) {
         _assertPrimaryProvenance();
         t.va = new VotiumAdapter(CRVUSD, DAO, VOTIUM);
-        t.vma = new VoteMarketAdapter(CRVUSD, DAO, CRM, VM_DESTINATION);
+        t.vma = new VoteMarketAdapter(CRVUSD, DAO, CRM, vmDestination);
         _assertValidatorPinAtFork();
         t.lister = new CurveGaugeLister(
             DAO,
@@ -684,6 +672,21 @@ abstract contract ForkFixture is TestBase {
         assertTrue(t.lister.paused(), "trio stays paused after deploy/bind (activation is a separate step)");
     }
 
+    /// @dev Standard trio: BOTH adapters on their primary real pins
+    /// (VoteMarket adapter bound to the whitelisted destination).
+    function _deployTrio(uint16 votiumBps) internal returns (Trio memory t) {
+        return _deployTrioAt(votiumBps, VM_DESTINATION);
+    }
+
+    /// @dev Trio with a VoteMarket adapter bound to an alternate (proven
+    /// non-whitelisted) destination; Votium side stays the real adapter.
+    /// Same shared setup as `_deployTrio` (CX-FORK-SETUP): pre-write
+    /// provenance first, both adapters bound under the narrowly scoped DAO
+    /// prank, controller pin asserted, paused postcondition.
+    function _deployTrioAltVm(uint16 votiumBps, address altDest) internal returns (Trio memory t) {
+        return _deployTrioAt(votiumBps, altDest);
+    }
+
     /// @dev S05: the explicit final activation step for positive rollout
     /// fixtures — the DAO owner unpauses ONLY after the applicable
     /// prerequisites have been arranged (bindings read back in
@@ -695,35 +698,6 @@ abstract contract ForkFixture is TestBase {
         fvm.prank(DAO);
         t.lister.setPaused(false);
         assertFalse(t.lister.paused(), "paid admission activated explicitly");
-    }
-
-    /// @dev Trio with a VoteMarket adapter bound to an alternate (proven
-    /// non-whitelisted) destination; Votium side stays the real adapter.
-    /// §4/R8-4 pre-write provenance runs first and BOTH adapters bind under
-    /// the narrowly scoped DAO prank exactly as in `_deployTrio`
-    /// (auditfix001 §7).
-    function _deployTrioAltVm(uint16 votiumBps, address altDest) internal returns (Trio memory t) {
-        _assertPrimaryProvenance();
-        t.va = new VotiumAdapter(CRVUSD, DAO, VOTIUM);
-        t.vma = new VoteMarketAdapter(CRVUSD, DAO, CRM, altDest);
-        _assertValidatorPinAtFork();
-        t.lister = new CurveGaugeLister(
-            DAO,
-            CRVUSD,
-            CONTROLLER,
-            FEEDIST,
-            CurveGaugeLister.AdmissionConfig(METAREGISTRY, 8),
-            CurveGaugeLister.PlatformConfig(address(t.va), address(t.vma), votiumBps),
-            TRUSTED_VALIDATOR
-        );
-        fvm.startPrank(DAO);
-        t.va.setLister(address(t.lister));
-        t.vma.setLister(address(t.lister));
-        fvm.stopPrank();
-        assertEq(t.va.lister(), address(t.lister), "votium adapter bound to this core");
-        assertEq(t.vma.lister(), address(t.lister), "votemarket adapter bound to this core");
-        // S05: stays paused after deploy/bind; activation is explicit.
-        assertTrue(t.lister.paused(), "alt-vm trio stays paused after deploy/bind");
     }
 
     /// @dev §5.2 fork-only seating: real controller two-step admin transfer
@@ -1042,6 +1016,50 @@ abstract contract ForkFixture is TestBase {
         }
     }
 
+    /// @dev CX-FORK-TRACE: complete, OWNER/SPENDER-SCOPED per-leg approval
+    /// evidence. Value-filtered counts alone do not bound every observed
+    /// approval — an unaccounted value for the SAME pair slips through a
+    /// count-only check. This helper asserts the full trace of the
+    /// (`ownerAddr`, `spender`) pair: every observed Approval event must
+    /// match one expected value with exact multiplicity, and every expected
+    /// value must be observed exactly once. Legitimate token-generated
+    /// decrements (the allowance-consumption zero emitted by the venue's own
+    /// transferFrom) are EXPECTED MEMBERS of the trace, never filtered out.
+    /// This is bounded-approval ingress evidence for the product-owned leg:
+    /// it is not proof of venue delivery, and the final cleared allowance
+    /// stays asserted separately (`_assertZeroApprovals`).
+    function _assertApprovalTrace(
+        FVm.Log[] memory logs,
+        address ownerAddr,
+        address spender,
+        uint256[] memory expectedValues,
+        string memory label
+    ) internal pure {
+        bool[] memory used = new bool[](expectedValues.length);
+        uint256 seen;
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (
+                logs[i].emitter == CRVUSD && logs[i].topics.length == 3 && logs[i].topics[0] == T_APPROVAL
+                    && address(uint160(uint256(logs[i].topics[1]))) == ownerAddr
+                    && address(uint160(uint256(logs[i].topics[2]))) == spender
+            ) {
+                require(logs[i].data.length == 32, string.concat(label, ": Approval data not one word"));
+                uint256 v = abi.decode(logs[i].data, (uint256));
+                bool matched;
+                for (uint256 j = 0; j < expectedValues.length; ++j) {
+                    if (!used[j] && expectedValues[j] == v) {
+                        used[j] = true;
+                        matched = true;
+                        break;
+                    }
+                }
+                require(matched, string.concat(label, ": approval value outside the bounded expected trace"));
+                seen += 1;
+            }
+        }
+        require(seen == expectedValues.length, string.concat(label, ": bounded trace multiplicity"));
+    }
+
     // ------------------------------------------------------------------
     // Votium incentive inspection (§6.1)
     // ------------------------------------------------------------------
@@ -1096,16 +1114,21 @@ abstract contract ForkFixture is TestBase {
     }
 
     /// @dev Exact Votium-side Approval/Transfer evidence for `times` deposits
-    /// of `gross`: the pull (lister->adapter, bounded approval = gross), the
-    /// venue's own net/fee transfers out of the adapter, and the adapter's
-    /// bounded approval lifecycle — `forceApprove` is zero-then-exact with the
-    /// zero request collapsed to ONE checked zero approval, so each deposit
-    /// emits the zero reset, the EXACT-gross set, the venue's own
-    /// full-consumption allowance-zero event from its transferFrom, and the
-    /// single post-deposit clear (3 zero events + 1 gross event per deposit —
-    /// the duplicate clear trace is gone; this expectation is the checked
-    /// witness, not a claim of identical token logs) — with a standing
-    /// rejection of any unlimited approval (R8-1).
+    /// of `gross`: the pull (lister->adapter), the venue's own net/fee
+    /// transfers out of the adapter, and the adapter's bounded-approval
+    /// lifecycle as a COMPLETE owner/spender-scoped trace (CX-FORK-TRACE).
+    /// `forceApprove` is zero-then-exact with the zero request collapsed to
+    /// ONE checked zero approval (SafeToken), so per deposit the
+    /// lister->adapter pair shows the zero reset, the EXACT-gross set and
+    /// the legitimate token-generated allowance-zero from the adapter's own
+    /// transferFrom ([0, gross, 0]); the adapter->venue pair adds the single
+    /// post-deposit clear ([0, gross, 0, 0]). Bounding the full trace —
+    /// exact multiplicity over every observed value, including a standing
+    /// unlimited approval, which would match no expected entry (R8-1) —
+    /// replaces the value-filtered counts: a count of one value does not
+    /// bound the others. This is ingress/custody evidence only, not proof of
+    /// venue delivery; the final cleared allowances stay asserted separately
+    /// by the callers' `_assertZeroApprovals`.
     function _assertVotiumLegEvents(Trio memory t, FVm.Log[] memory logs, uint256 gross, uint64 times) internal view {
         uint256 fee = (gross * IVotiumVenue(VOTIUM).platformFee()) / IVotiumVenue(VOTIUM).DENOMINATOR();
         assertEq(
@@ -1114,23 +1137,24 @@ abstract contract ForkFixture is TestBase {
             "votium leg: pull lister->adapter"
         );
         assertEq(
-            _tokenApprovalCount(logs, address(t.lister), address(t.va), gross),
-            times,
-            "votium leg: lister approval = gross"
-        );
-        assertEq(
             _tokenTransferCount(logs, address(t.va), IVotiumVenue(VOTIUM).feeAddress(), fee),
             times,
             "votium leg: exact fee transfer"
         );
         assertEq(_tokenTransferCount(logs, address(t.va), VOTIUM, gross - fee), times, "votium leg: exact net transfer");
-        assertEq(_tokenApprovalCount(logs, address(t.va), VOTIUM, gross), times, "votium leg: bounded approval = gross");
-        assertEq(
-            _tokenApprovalCount(logs, address(t.va), VOTIUM, 0),
-            3 * times,
-            "votium leg: zero-reset + venue-consumed allowance zero + single checked clear"
-        );
-        assertEq(_tokenApprovalCount(logs, address(t.va), VOTIUM, type(uint256).max), 0, "votium leg: never unlimited");
+        uint256[] memory listerPair = new uint256[](3 * uint256(times));
+        uint256[] memory venuePair = new uint256[](4 * uint256(times));
+        for (uint256 d = 0; d < uint256(times); ++d) {
+            listerPair[3 * d] = 0;
+            listerPair[3 * d + 1] = gross;
+            listerPair[3 * d + 2] = 0;
+            venuePair[4 * d] = 0;
+            venuePair[4 * d + 1] = gross;
+            venuePair[4 * d + 2] = 0;
+            venuePair[4 * d + 3] = 0;
+        }
+        _assertApprovalTrace(logs, address(t.lister), address(t.va), listerPair, "votium leg: lister approval trace");
+        _assertApprovalTrace(logs, address(t.va), VOTIUM, venuePair, "votium leg: bounded approval trace");
     }
 
     // ------------------------------------------------------------------
