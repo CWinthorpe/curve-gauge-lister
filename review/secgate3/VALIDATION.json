@@ -1,0 +1,99 @@
+{
+  "activation": "HOLD; PAO-FD/CTL/AUTH ACTIVATION-OPEN; owner release/activation approvals, current dependencies/venue readiness, operations/funding and post-authorization funded trial OPEN",
+  "all_items": [
+    "V01",
+    "V02",
+    "V03",
+    "V04",
+    "V05",
+    "V06",
+    "I01",
+    "I02",
+    "I03",
+    "I04",
+    "I05",
+    "I06",
+    "I07",
+    "I08",
+    "I09",
+    "I10",
+    "I11",
+    "I12",
+    "I13",
+    "I14"
+  ],
+  "audit_severity_counts": {
+    "cgl-sec-r1": {
+      "Critical": 0,
+      "High": 1,
+      "Informational": 7,
+      "Low": 3,
+      "Medium": 4
+    },
+    "cgl-sec-r2": {
+      "Critical": 0,
+      "High": 0,
+      "Informational": 11,
+      "Low": 2,
+      "Medium": 3
+    },
+    "cgl-sec-r3": {
+      "Critical": 0,
+      "High": 0,
+      "Informational": 14,
+      "Low": 5,
+      "Medium": 1
+    }
+  },
+  "binding_sha256": "5545083c1114b902ffa2143e4583f65a0f9be47251442e2785b9d3c713455898",
+  "bounded_confirmation_cells": [
+    "P1",
+    "P2",
+    "P3",
+    "P4",
+    "D1",
+    "D2",
+    "D3",
+    "D4",
+    "O1",
+    "O2",
+    "O3",
+    "O4"
+  ],
+  "candidate": "3ba03f35d66ca5172c4c417335804f0a6f4ed07d",
+  "candidate_tracked_files": 64,
+  "census": {
+    "default": 77,
+    "fork": 13
+  },
+  "checks_passed": 1803,
+  "current_chain_readiness_verified": false,
+  "dispositions": {
+    "ACCEPT-WITH-REASON": 18,
+    "REJECT": 2
+  },
+  "fresh_product_tests_run": false,
+  "lean_convergence": "RETAINED",
+  "product_artifacts_recompared": 6,
+  "retained_artifacts_equal": 138,
+  "saved_native_results": {
+    "review/secdocs/RECEIPTS.json": {
+      "discovery_default": 77,
+      "discovery_fork": 13,
+      "test-fork": 13,
+      "test-offline": 77,
+      "test-offline-unreachable": 77
+    },
+    "review/secdocs2/RECEIPTS.json": {
+      "discovery_default": 77,
+      "discovery_fork": 13,
+      "test-fork": 13,
+      "test-offline": 77,
+      "test-offline-unreachable": 77
+    }
+  },
+  "scope": "Executed authority-artifact checks, manual bounded prose confirmation and retained evidence re-comparison; no fresh Forge/RPC/deployment",
+  "security_convergence_certified": true,
+  "status": "PASS",
+  "unchanged_product_files": 53
+}
