@@ -45,6 +45,8 @@ Views:
 
 Monetary views are gross escrow accounting, not venue-delivery or funded-execution quotes: `releasable` is the current status/flag-conditioned gross matured-unpaid projection; `remaining` is the Active unreleased liability; `totalEscrow` is the aggregate paid Active liability, not surplus and not a guarantee that a venue or the FeeDistributor can currently execute; `epochsElapsed` is capped age under the four-quarter schedule, not a count of funded quarters.
 
+`releasable` kill-flag semantics: a non-Active record returns zero without consulting the gauge, and an Active listing whose readable `is_killed()` flag is true also returns zero. For an Active gauge whose kill-flag read or decode fails, `releasable` does not coerce the failure to zero — the view itself fails. A consumer scheduling releases must not silently interpret that failed view as no amount due, as a kill, or as executable readiness; it must surface the failure and decide separately. This product ships no scheduler and none is implied here.
+
 Pure:
 
 - `epochStart(uint256 timestamp)` -> `uint256`.
@@ -73,6 +75,8 @@ Successful confiscation emits `EscrowConfiscated` then `FeeCheckpointResult(true
 No-argument errors:
 
 `BadAdmissionConfig()`, `BadCoin()`, `BadCoinCount()`, `BadGaugeType()`, `BadLpToken()`, `BadPlatformConfig()`, `ConfiscationDeltaMismatch()`, `DistributorUnusable()`, `FeeDeltaMismatch()`, `GaugeKilledAtAdmission()`, `GaugeMismatch()`, `IndexOutOfRange()`, `ListingsPaused()`, `MembershipFailed()`, `NotOwner()`, `NotPendingOwner()`, `PoolNotRegistered()`, `Reentrancy()`, `WrongChain()`, `ZeroOwner()`, `ZeroTarget()`.
+
+`BadAdmissionConfig()` diagnostic note: this error is not limited to invalid registry/maxCoins configuration. A successfully decoded constructor `decimals()` return other than 18 also reverts with `BadAdmissionConfig()`. Diagnose by call context — construction versus a `setAdmissionConfig`/admission-validation site imply different candidate causes. A dependency call or decode failure (for example a `decimals()` call that reverts or returns malformed data) need not produce this local error, and not every constructor failure shares this diagnostic. No rename or new error is introduced.
 
 Address-bearing product errors:
 
