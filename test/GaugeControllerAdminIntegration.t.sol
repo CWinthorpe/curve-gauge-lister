@@ -134,6 +134,16 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         bytes32 listingA;
         bytes32 listingB;
         int128 nGauges;
+        // CONF-04: complete keyed observations — membership weight/state of
+        // the SELECTED candidates and the lister's platform allowances.
+        uint256 weightA;
+        uint256 weightB;
+        bool regA;
+        bool regB;
+        int128 typeA;
+        int128 typeB;
+        uint256 allowListerVotium;
+        uint256 allowListerVoteMarket;
     }
 
     function _world(address gaugeA, address gaugeB) internal view returns (World memory w) {
@@ -152,6 +162,14 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         w.listingA = keccak256(abi.encode(lister.getListing(gaugeA)));
         w.listingB = keccak256(abi.encode(lister.getListing(gaugeB)));
         w.nGauges = c.n_gauges();
+        w.weightA = c.get_gauge_weight(gaugeA);
+        w.weightB = c.get_gauge_weight(gaugeB);
+        w.regA = c.registered(gaugeA);
+        w.regB = c.registered(gaugeB);
+        if (w.regA) w.typeA = c.gauge_types(gaugeA);
+        if (w.regB) w.typeB = c.gauge_types(gaugeB);
+        w.allowListerVotium = token.allowance(address(lister), address(votium));
+        w.allowListerVoteMarket = token.allowance(address(lister), address(voteMarket));
     }
 
     function _assertWorldEq(World memory a, World memory b, string memory label) internal pure {
@@ -274,12 +292,16 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         (address poolA, address gaugeA) = _pool(0, 0, 0);
         (address poolB, address gaugeB) = _pool(1, 0, 1);
         World memory pre = _world(gaugeA, gaugeB);
+        rv.recordLogs();
         (bool paidOk, bytes memory paidRet) = _lane(payer, poolA, gaugeA, 0, 0);
         require(!paidOk, "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK paid");
         _revertMatches(paidRet, _notAdderOnLister(), "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK paid frame");
         (bool daoOk, bytes memory daoRet) = _laneDao(poolB, gaugeB, 0, 1, 9);
         require(!daoOk, "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK dao-free");
         _revertMatches(daoRet, _notAdderOnLister(), "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK dao-free frame");
+        // CONF-04: the rejection happened at R's gate before any emit; the
+        // fully reverted admission leaves no log trace at all.
+        require(rv.getRecordedLogs().length == 0, "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK no logs");
         _assertWorldEq(pre, _world(gaugeA, gaugeB), "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK whole-tx rollback");
         require(c.addAttempts() == 0, "no C add attempted");
         require(!c.registered(gaugeA) && !c.registered(gaugeB), "no membership");
@@ -296,12 +318,14 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         (address poolD, address gaugeD) = _pool(3, 0, 0);
         (address poolE, address gaugeE) = _pool(4, 0, 0);
         World memory pre2 = _world(gaugeD, gaugeE);
+        rv.recordLogs();
         (bool roOk, bytes memory roRet) = _lane(payer, poolD, gaugeD, 0, 3);
         require(!roOk, "revoked paid");
         _revertMatches(roRet, _notAdderOnLister(), "revoked paid frame");
         (bool rdOk, bytes memory rdRet) = _laneDao(poolE, gaugeE, 0, 4, 3);
         require(!rdOk, "revoked dao-free");
         _revertMatches(rdRet, _notAdderOnLister(), "revoked dao-free frame");
+        require(rv.getRecordedLogs().length == 0, "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK revoked no logs");
         _assertWorldEq(pre2, _world(gaugeD, gaugeE), "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK revoked rollback");
         // the earlier committed listing is untouched by the revocation
         require(c.gauge_types(gaugeC) == 0, "committed listing kept");
@@ -350,35 +374,68 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         (address poolA, address gaugeA) = _pool(0, 1, 0);
         World memory pre = _world(gaugeA, address(0));
         c.setAddMode(1);
+        rv.recordLogs();
         (bool a1, bytes memory r1) = _lane(payer, poolA, gaugeA, 1, 0);
         c.setAddMode(0);
         require(!a1, "LISTER_POSTCHECK_FULL_ROLLBACK raw fail");
         require(_isErr(r1, RouterControllerMock.MockRejected.selector, ""), "raw failure bubbles exact");
+        // The add attempt failed inside C before any emit: the whole
+        // rejected admission leaves no log trace at all.
+        require(rv.getRecordedLogs().length == 0, "LISTER_POSTCHECK_FULL_ROLLBACK raw fail no logs");
         _assertWorldEq(pre, _world(gaugeA, address(0)), "LISTER_POSTCHECK_FULL_ROLLBACK raw fail");
 
         // Malformed membership read reverts the whole admission.
         (address poolB, address gaugeB) = _pool(0, 2, 0);
         pre = _world(gaugeB, address(0));
         c.setTypesMode(2);
+        rv.recordLogs();
         (bool a2,) = _lane(payer, poolB, gaugeB, 2, 0);
         c.setTypesMode(0);
         require(!a2, "LISTER_POSTCHECK_FULL_ROLLBACK malformed");
+        {
+            // CONF-04 log cell: whatever the inner successful frames of the
+            // rolled-back admission emitted, the reverted transaction
+            // committed NO lister success event and NO venue receipt.
+            RouterVm.Log[] memory lg2 = rv.getRecordedLogs();
+            require(
+                _countEmitter(lg2, address(lister)) == 0, "LISTER_POSTCHECK_FULL_ROLLBACK malformed no lister event"
+            );
+            require(
+                _countEmitter(lg2, address(votium)) + _countEmitter(lg2, address(voteMarket)) == 0,
+                "LISTER_POSTCHECK_FULL_ROLLBACK malformed no venue receipt event"
+            );
+        }
         _assertWorldEq(pre, _world(gaugeB, address(0)), "LISTER_POSTCHECK_FULL_ROLLBACK malformed");
 
         // Lying membership after add forces L's postcheck (MembershipFailed).
         (address poolC, address gaugeC) = _pool(0, 3, 0);
         pre = _world(gaugeC, address(0));
         c.setTypesMode(1); // gauge_types lies +100 once registered
+        rv.recordLogs();
         (bool a3, bytes memory r3) = _lane(payer, poolC, gaugeC, 3, 0);
         c.setTypesMode(0);
         require(!a3, "LISTER_POSTCHECK_FULL_ROLLBACK lying");
         require(_isErr(r3, CurveGaugeLister.MembershipFailed.selector, ""), "postcheck error");
+        {
+            RouterVm.Log[] memory lg3 = rv.getRecordedLogs();
+            require(_countEmitter(lg3, address(lister)) == 0, "LISTER_POSTCHECK_FULL_ROLLBACK lying no lister event");
+            require(
+                _countEmitter(lg3, address(votium)) + _countEmitter(lg3, address(voteMarket)) == 0,
+                "LISTER_POSTCHECK_FULL_ROLLBACK lying no venue receipt event"
+            );
+        }
         _assertWorldEq(pre, _world(gaugeC, address(0)), "LISTER_POSTCHECK_FULL_ROLLBACK lying");
         require(!c.registered(gaugeC), "registration rolled back");
     }
 
     function _revertMatches(bytes memory actual, bytes memory expected, string memory label) internal pure {
         require(keccak256(actual) == keccak256(expected), label);
+    }
+
+    function _countEmitter(RouterVm.Log[] memory logs, address emitter) internal pure returns (uint256 n) {
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].emitter == emitter) n += 1;
+        }
     }
 
     function _isErr(bytes memory ret, bytes4 sel, bytes memory args) internal pure returns (bool) {
@@ -399,8 +456,13 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
 
     function test_IndependentDaoRouteBypassesListerRestrictions() public {
         _compose();
-        _unpause();
-        _grantLister(false); // L revoked; its lane is dead
+        // CONF-04 required positive start: L is PAUSED and REVOKED before
+        // the independent D route runs. The grant/revoke pair exercises the
+        // actual state transition, not just a never-granted default.
+        _grantLister(true);
+        _grantLister(false);
+        assertTrue(lister.paused(), "DAO_ROUTE_NO_LISTER_DEPENDENCY positive starts paused");
+        assertFalse(r.isAdder(address(lister)), "DAO_ROUTE_NO_LISTER_DEPENDENCY positive starts revoked");
 
         // structurally unacceptable to L: pool absent from the registry
         address badPool = address(new MockPool());
@@ -428,10 +490,8 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         require(lister.totalEscrow() == 0, "no escrow");
         require(lister.getListing(badGauge).status == CurveGaugeLister.Status.Unlisted, "no listing record");
 
-        // L lanes still fail their real gates: unregistered pool.
-        (bool l1, bytes memory lr1) = _lane(payer, badPool, badGauge, 0, 0);
-        require(!l1, "paid lane accepted an already-registered gauge");
-        require(_isErr(lr1, CurveGaugeLister.ControllerRegistryOccupied.selector, abi.encode(badGauge)), "L gate kept");
+        // CONF-04: the full restriction contrast on the actual lanes.
+        _i05Contrasts(badPool, badGauge);
 
         // non-D cannot borrow the independent DAO route
         (bool n1, bytes memory nr1) = _call(
@@ -448,6 +508,62 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         );
     }
 
+    /// @dev CONF-04 restriction contrasts on I05's own composition:
+    /// (a) paid lane while paused → ListingsPaused; (b) unpaused but still
+    /// revoked paid lane → R's real NotAdder(L); (c) DAO-free from non-owner
+    /// → NotOwner; (d) structurally unacceptable candidate → PoolNotRegistered
+    /// (gauge absent from C, so occupancy is not the cause); (e) the
+    /// already-occupied-membership contrast on D's independently added gauge.
+    function _i05Contrasts(address badPool, address badGauge) internal {
+        _i05PausedGate();
+        _i05RevokedLaneAndOwnerGate();
+        _i05StructuralGates(badPool, badGauge);
+    }
+
+    function _i05PausedGate() internal {
+        (address poolA, address gaugeA) = _pool(2, 0, 0);
+        (bool p1, bytes memory pr1) = _lane(payer, poolA, gaugeA, 0, 2);
+        require(!p1, "paused paid lane admitted");
+        require(_isErr(pr1, CurveGaugeLister.ListingsPaused.selector, ""), "paid pause gate");
+    }
+
+    function _i05RevokedLaneAndOwnerGate() internal {
+        _unpause();
+        (address poolB, address gaugeB) = _pool(2, 1, 0);
+        (bool p2, bytes memory pr2) = _lane(payer, poolB, gaugeB, 1, 2);
+        require(!p2, "revoked paid lane admitted");
+        require(
+            _isErr(pr2, GaugeControllerAdmin.NotAdder.selector, abi.encode(address(lister))), "paid lane reaches R gate"
+        );
+        require(!c.registered(gaugeB), "revoked paid never reached C");
+
+        (bool p3, bytes memory pr3) = _laneDaoFrom(payer, poolB, gaugeB, 1, 2, 7);
+        require(!p3, "non-owner dao-free admitted");
+        require(_isErr(pr3, CurveGaugeLister.NotOwner.selector, ""), "dao-free owner gate");
+    }
+
+    function _i05StructuralGates(address badPool, address badGauge) internal {
+        // (d1) pool the registry has never seen: the provenance read itself
+        // reverts (UnknownPool from the configured registry) — L's structural
+        // gate, exact cause, not a pause/auth artifact.
+        address freeGauge = address(new MockGauge(address(new MockERC20(18))));
+        (bool p4, bytes memory pr4) = _lane(payer, badPool, freeGauge, 9, 9);
+        require(!p4, "L accepted structurally unacceptable candidate");
+        require(_isErr(pr4, MockCurveRegistry.UnknownPool.selector, ""), "L registry provenance gate");
+
+        // (d2) pool registered but explicitly not approved: L's own
+        // PoolNotRegistered fires.
+        (address poolD2, address gaugeD2) = _pool(3, 0, 0);
+        registry.setRegistered(poolD2, 3, false);
+        (bool p5, bytes memory pr5) = _lane(payer, poolD2, gaugeD2, 0, 3);
+        require(!p5, "L accepted an unapproved pool");
+        require(_isErr(pr5, CurveGaugeLister.PoolNotRegistered.selector, ""), "L approval gate kept");
+
+        (bool l1, bytes memory lr1) = _lane(payer, badPool, badGauge, 0, 0);
+        require(!l1, "paid lane accepted an already-registered gauge");
+        require(_isErr(lr1, CurveGaugeLister.ControllerRegistryOccupied.selector, abi.encode(badGauge)), "L gate kept");
+    }
+
     function _call(address from, address target, bytes memory data) internal returns (bool, bytes memory) {
         vm.prank(from);
         (bool ok, bytes memory ret) = target.call(data);
@@ -456,6 +572,24 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
 
     function _callDao(address target, bytes memory data) internal returns (bool, bytes memory) {
         return _call(address(dao), target, data);
+    }
+
+    function _laneDaoFrom(
+        address who,
+        address pool,
+        address gauge,
+        uint256 gaugeIndex,
+        uint256 handlerId,
+        uint256 weight
+    ) internal returns (bool, bytes memory) {
+        vm.prank(who);
+        (bool ok, bytes memory ret) = address(lister)
+            .call(
+                abi.encodeWithSelector(
+                    CurveGaugeLister.listGaugeNoEscrow.selector, pool, gauge, gaugeIndex, handlerId, weight
+                )
+            );
+        return (ok, ret);
     }
 
     // ------------------------------------------------------------------

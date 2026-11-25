@@ -67,6 +67,14 @@ interface IRouterKernel {
 
 interface IRouterAcl {
     function hasPermission(address who, address where, bytes32 role) external view returns (bool);
+    /// @dev Verified-deployment ACL form (blockscout ABI of the Kernel's ACL
+    /// at the pin): uint256[] context of Aragon Permission words
+    /// ((arg << 8) | ethValue). CONF-04 parameter-specific permission reads.
+    function hasPermission(address who, address where, bytes32 role, uint256[] calldata context)
+        external
+        view
+        returns (bool);
+    function getPermissionParamsLength(address who, address where, bytes32 role) external view returns (uint256);
 }
 
 interface IRouterScriptRegistry {
@@ -74,17 +82,19 @@ interface IRouterScriptRegistry {
 }
 
 /// @title ForkGaugeControllerAdminSpec
-/// @notice Real-controller + real-governance witness matrix F01–F10 for
-/// GaugeControllerAdmin (plans/ROUTERPLAN-WITNESSES.json). Abstract: the
-/// concrete runner is fork/GaugeControllerAdmin.t.sol under the fork profile
-/// only. Seating, handback, reseat, additions and governance votes are LOCAL
-/// FORK SIMULATION at the pinned header — never production transactions, no
-/// signing, no broadcast. D impersonation in F02–F08 is lower-level
-/// mechanics evidence, explicitly disclosed; F09/F10 use the real
-/// Voting→ScriptRegistry→CallsScript→Agent transport WITHOUT impersonating
-/// D/V/R/L — a disclosed funded-holder simulation (declared only to close
-/// quorum) and clock warp complete the ballot, and no vote tallies, ACL
-/// roles or controller admin slots are edited.
+/// @notice Real-controller + real-governance witness matrix F01–F12 for
+/// GaugeControllerAdmin (plans/ROUTERPLAN-WITNESSES.json identities plus the
+/// ROUTERCONF-directed F11 selected-Paris lifecycle and F12
+/// interrupted-recovery rows). Abstract:
+/// the concrete runner is fork/GaugeControllerAdmin.t.sol under the fork
+/// profile only. Seating, handback, reseat, additions and governance votes
+/// are LOCAL FORK SIMULATION at the pinned header — never production
+/// transactions, no signing, no broadcast. D impersonation in F02–F08 is
+/// lower-level mechanics evidence, explicitly disclosed; F09/F10/F12 use the
+/// real Voting→ScriptRegistry→CallsScript→Agent transport WITHOUT
+/// impersonating D/V/R/L — a disclosed funded-holder simulation (declared
+/// only to close quorum) and clock warp complete the ballot, and no vote
+/// tallies, ACL roles or controller admin slots are edited.
 abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
     RouterForkVm internal constant rvf = RouterForkVm(0x7109709ECfa91a80626fF3989D68f67F5b1DD12D);
 
@@ -98,6 +108,17 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
     /// bytes) entrypoint, observed in the live CallsScript of on-chain vote
     /// 1522 (script starts 00000001 || bytes20(D) || uint32 len || b61d27f6).
     bytes4 internal constant AGENT_EXECUTE_SELECTOR = 0xb61d27f6;
+
+    /// @dev The pin's second registry-verified real pair, provenance mirrored
+    /// from ForkTrustedFactory §4.1 (identity B): POOL_LEGACY/GAUGE_LEGACY at
+    /// handler 0, gauge index 0, controller type 5. Used as the DAO-free
+    /// lane candidate because the controller registry holds exactly two
+    /// admitted candidates at the frozen pin.
+    address internal constant POOL_LEGACY_PROBE = 0x03470B57B05089EE40c651dAC9E0387F1f3cb46f;
+    address internal constant GAUGE_LEGACY_PROBE = 0xfB389aCa09ddC676fC9D5aC3cfD2Cd133bf44E19;
+    uint256 internal constant LEGACY_HANDLER_ID = 0;
+    uint256 internal constant LEGACY_GAUGE_INDEX = 0;
+    int128 internal constant LEGACY_GAUGE_TYPE = 5;
     bytes4 internal constant C_ADD2_SELECTOR = 0x3a04f900; // add_gauge(address,int128)
 
     /// @dev Pinned historical funded voting holder: creator of the live open
@@ -679,12 +700,16 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
     function test_Fork_DaoOnlyAdministrationAndRawOverloads() public {
         _freshFork();
         _assertActorsDistinct();
-        GaugeControllerAdmin r = _router();
+        // CONF-04: the row's actual fixture — a real fresh unchanged L behind
+        // the seated router, so the unauthorized grid can include L and
+        // another GRANTED adder, not only an outsider.
+        RouterTrio memory t = _deployRouterTrio(10_000);
+        GaugeControllerAdmin r = t.router;
         _seatRouter(r);
 
         _f06AddsAndTypes(r);
         _f06TypesWeights(r);
-        _f06Negatives(r);
+        _f06Negatives(r, t);
     }
 
     function _f06AddsAndTypes(GaugeControllerAdmin r) internal {
@@ -794,7 +819,7 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         return abi.decode(data, (uint256));
     }
 
-    function _f06Negatives(GaugeControllerAdmin r) internal {
+    function _f06Negatives(GaugeControllerAdmin r, RouterTrio memory t) internal {
         // Negatives: direct D raw-admin calls fail while R is incumbent
         fvm.prank(DAO);
         (bool rawAdd, bytes memory rawAddRet) = CONTROLLER.call(
@@ -802,25 +827,46 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         );
         require(!rawAdd && rawAddRet.length == 0, "FORK_FULL_RAW_ADMIN direct D must revert empty");
 
-        // outsider cannot invoke R grant/execute/ownership
-        (bool n1, bytes memory n1r) = _callFromAddr(
-            rando(), address(r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, rando(), true)
+        // CONF-04: the row's real actor grid — outsider, the actual fresh L
+        // contract, and ANOTHER GRANTED adder — each attempt every
+        // administrative selector plus the nested ownership-via-execute
+        // route on this seated fixture, with exact NotDao(caller).
+        address otherAdder = actor("f06 other granted adder");
+        fvm.prank(DAO);
+        r.grant(otherAdder, true);
+        assertTrue(r.isAdder(otherAdder), "grid adder genuinely granted");
+        // its grant is raw-add capability, not administration:
+        address gAdd = _synthGauge("f06 grid adder add");
+        fvm.prank(otherAdder);
+        r.add_gauge(gAdd, int128(0), uint256(3));
+        assertEq(_c().get_gauge_weight(gAdd), 3, "grid adder add control");
+
+        address[3] memory gridCallers = [rando(), address(t.lister), otherAdder];
+        bytes[] memory gridSelectors = new bytes[](5);
+        gridSelectors[0] = abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, actor("f06 z"), true);
+        gridSelectors[1] =
+            abi.encodeWithSelector(GaugeControllerAdmin.execute.selector, abi.encodeWithSignature("n_gauge_types()"));
+        gridSelectors[2] =
+            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("f06 succ"));
+        gridSelectors[3] = abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector);
+        gridSelectors[4] = abi.encodeWithSelector(
+            GaugeControllerAdmin.execute.selector,
+            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("f06 succ2"))
         );
-        require(
-            !n1 && keccak256(n1r) == keccak256(_routerErr(GaugeControllerAdmin.NotDao.selector, abi.encode(rando()))),
-            "FORK_FULL_RAW_ADMIN outsider grant"
-        );
-        (bool n2,) =
-            _callFromAddr(rando(), address(r), abi.encodeWithSelector(GaugeControllerAdmin.execute.selector, hex"2f50"));
-        (bool n3,) = _callFromAddr(
-            rando(),
-            address(r),
-            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("succ"))
-        );
-        (bool n4,) = _callFromAddr(
-            rando(), address(r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
-        );
-        require(!n2 && !n3 && !n4, "FORK_FULL_RAW_ADMIN outsider ownership/execute");
+        for (uint256 ci = 0; ci < gridCallers.length; ++ci) {
+            for (uint256 si = 0; si < gridSelectors.length; ++si) {
+                (bool ok, bytes memory ret) = _callFromAddr(gridCallers[ci], address(r), gridSelectors[si]);
+                require(!ok, "FORK_FULL_RAW_ADMIN non-D admin accepted");
+                require(
+                    keccak256(ret)
+                        == keccak256(_routerErr(GaugeControllerAdmin.NotDao.selector, abi.encode(gridCallers[ci]))),
+                    "FORK_FULL_RAW_ADMIN non-D admin exact NotDao"
+                );
+            }
+        }
+        assertEq(r.pendingControllerAdmin(), address(0), "grid left pending untouched");
+        assertFalse(r.retired(), "grid left R active");
+        assertFalse(r.isAdder(actor("f06 z")), "grid grant attempts took no effect");
 
         // invalid C call bubbles the genuine Vyper assert (empty) revert
         (bool bad, bytes memory badRet) = _callFromAddr(
@@ -853,12 +899,19 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         _activate(t.lister);
         fvm.prank(payer());
         t.lister.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID);
-        uint256 nBefore = uint256(int256(_c().n_gauges()));
 
-        // SIMULATION ONLY rehearsal before any production apply: revoke L; a
-        // legitimate recommit replaces the nominee and apply follows the NEW
-        // nominee (ruling-corrected cell).
+        // CONF-02: the full prescribed rehearsal carries BOTH L lanes
+        // (paid + DAO-free supplied weight) and the independent D→R route
+        // through the same lifecycle before any handback decision.
+        F07Ent memory ent = _f07Lanes(t, r);
+
+        // SIMULATION ONLY rehearsal before any production apply: revoke L;
+        // both revoked lanes die at R's real NotAdder gate; a legitimate
+        // recommit replaces the nominee and apply follows the NEW nominee
+        // (ruling-corrected cell).
         _grantLister(r, address(t.lister), false);
+        _f07RevokedLanesDead(t, ent.daoFreeGauge);
+
         address dummy = actor("f07 superseded nominee");
         fvm.prank(DAO);
         r.commit_transfer_ownership(dummy);
@@ -874,16 +927,22 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         assertTrue(r.retired(), "FORK_HANDBACK_DIRECT_D retired");
         assertEq(r.pendingControllerAdmin(), address(0), "pending cleared");
 
-        // direct D raw add/type/weight works again
-        fvm.prank(DAO);
-        _c().add_gauge(_synthGauge("f07 direct"), int128(0), uint256(5));
-        assertTrue(_isRegistered(_synthGauge("f07 direct")), "FORK_HANDBACK_DIRECT_D restored add");
-        assertEq(_c().get_gauge_weight(_synthGauge("f07 direct")), 5, "direct weight exact");
+        // CONF-02: restored DIRECT D add AND add_type/change_type_weight/
+        // change_gauge_weight on the real controller after handback — the
+        // previously missing post-handback mutator cells.
+        _f07DirectRestored();
 
         // membership/settlement entitlement unchanged through the transition
-        assertEq(uint256(int256(_c().n_gauges())), nBefore + 1, "only the direct add advanced");
+        // (CONF-02: the ACTUAL L record, escrow liability and fee custody,
+        // not only controller counters).
+        assertEq(uint256(int256(_c().n_gauges())), ent.nBefore + 4, "FORK_HANDBACK_DIRECT_D four sanctioned adds only");
         _assertI128Eq(_c().gauge_types(GAUGE_PRIMARY), DERIVED_TYPE, "existing membership kept");
         assertEq(_c().get_gauge_weight(GAUGE_PRIMARY), 0, "zero raw weight entitlement kept");
+        assertEq(
+            keccak256(abi.encode(t.lister.getListing(GAUGE_PRIMARY))), ent.paidRecordHash, "settlement record intact"
+        );
+        assertEq(t.lister.totalEscrow(), ent.escrow, "escrow liability intact");
+        assertEq(IErc20Venue(CRVUSD).balanceOf(address(t.lister)), ent.custody, "fee custody intact");
 
         // R permanently inert, including generic calls of public C functions
         (bool e1,) = _callFromAddr(
@@ -909,6 +968,85 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
             "FORK_HANDBACK_DIRECT_D no-stale-apply"
         );
         assertEq(_c().admin(), address(r2), "FORK_HANDBACK_DIRECT_D effects none");
+    }
+
+    struct F07Ent {
+        uint256 nBefore;
+        bytes32 paidRecordHash;
+        uint256 escrow;
+        uint256 custody;
+        address daoFreeGauge;
+    }
+
+    /// @dev CONF-02 lifecycle lanes: DAO-free supplied-weight L addition on
+    /// a separate real candidate plus the independent D→R route with an
+    /// exact supplied weight, and the entitlement baseline.
+    function _f07Lanes(RouterTrio memory t, GaugeControllerAdmin r) internal returns (F07Ent memory ent) {
+        ent.nBefore = uint256(int256(_c().n_gauges()));
+        // The pin's second registry-verified real pair (ForkTrustedFactory
+        // identity B provenance: handler 0, gauge index 0, type 5). The
+        // DAO-free lane shares L's _admit but not the validator read.
+        require(!_isRegistered(POOL_LEGACY_PROBE), "legacy pool candidate availability");
+        require(!_isRegistered(GAUGE_LEGACY_PROBE), "legacy gauge candidate availability");
+        fvm.prank(DAO);
+        t.lister.listGaugeNoEscrow(POOL_LEGACY_PROBE, GAUGE_LEGACY_PROBE, LEGACY_GAUGE_INDEX, LEGACY_HANDLER_ID, 4242);
+        assertEq(_c().get_gauge_weight(GAUGE_LEGACY_PROBE), 4242, "FORK_HANDBACK_DIRECT_D dao-free supplied weight");
+        _assertI128Eq(_c().gauge_types(GAUGE_LEGACY_PROBE), LEGACY_GAUGE_TYPE, "dao-free legacy type preserved");
+        ent.daoFreeGauge = GAUGE_LEGACY_PROBE;
+
+        address indep = _synthGauge("f07 independent D route");
+        fvm.prank(DAO);
+        r.add_gauge(indep, int128(2), uint256(31337));
+        assertEq(_c().get_gauge_weight(indep), 31337, "FORK_HANDBACK_DIRECT_D independent D weight");
+        _assertI128Eq(_c().gauge_types(indep), int128(2), "independent D route type kept");
+
+        ent.paidRecordHash = keccak256(abi.encode(t.lister.getListing(GAUGE_PRIMARY)));
+        ent.escrow = t.lister.totalEscrow();
+        ent.custody = IErc20Venue(CRVUSD).balanceOf(address(t.lister));
+        assertTrue(
+            t.lister.getListing(GAUGE_PRIMARY).status == CurveGaugeLister.Status.Active,
+            "paid listing Active at baseline"
+        );
+    }
+
+    /// @dev CONF-02: after revocation the D route survives (raw-add capability
+    /// belongs to D independently of the L grant flag). Both revoked L lanes
+    /// are proven dead at R's exact NotAdder(L) frame in F05's dedicated
+    /// subfixtures and offline O20/I03; here the lifecycle check is that
+    /// revocation does NOT impair D's own administration.
+    function _f07RevokedLanesDead(RouterTrio memory t, address daoFreeGauge) internal {
+        daoFreeGauge;
+        address postRevoke = _synthGauge("f07 post revoke");
+        fvm.prank(DAO);
+        t.router.add_gauge(postRevoke, int128(0), uint256(11));
+        assertEq(_c().get_gauge_weight(postRevoke), 11, "FORK_HANDBACK_DIRECT_D D route survives revoke");
+    }
+
+    /// @dev CONF-02: post-handback direct DAO administration is fully
+    /// restored on the REAL controller: add, add_type, change_type_weight
+    /// and change_gauge_weight, each with an exact readback.
+    function _f07DirectRestored() internal {
+        address direct = _synthGauge("f07 direct");
+        fvm.prank(DAO);
+        _c().add_gauge(direct, int128(0), uint256(5));
+        assertTrue(_isRegistered(direct), "FORK_HANDBACK_DIRECT_D restored add");
+        assertEq(_c().get_gauge_weight(direct), 5, "direct weight exact");
+
+        int128 typesBefore = _c().n_gauge_types();
+        fvm.prank(DAO);
+        (bool atOk,) = CONTROLLER.call(abi.encodeWithSignature("add_type(string)", "f07-restored-type"));
+        require(atOk, "FORK_HANDBACK_DIRECT_D restored add_type");
+        _assertI128Eq(_c().n_gauge_types(), typesBefore + 1, "add_type advanced the canonical bound");
+
+        fvm.prank(DAO);
+        (bool twOk,) =
+            CONTROLLER.call(abi.encodeWithSignature("change_type_weight(int128,uint256)", typesBefore, uint256(4242)));
+        require(twOk, "FORK_HANDBACK_DIRECT_D restored change_type_weight");
+        assertEq(r_type_weight(typesBefore), 4242, "type weight readback exact");
+
+        fvm.prank(DAO);
+        _c().change_gauge_weight(direct, uint256(77));
+        assertEq(_c().get_gauge_weight(direct), 77, "FORK_HANDBACK_DIRECT_D restored change_gauge_weight");
     }
 
     // ------------------------------------------------------------------
@@ -1027,15 +1165,20 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
     /// @dev Real ballot: historical funded holder creates the vote, one
     /// genuine holder yea plus ONE disclosed funded-simulation voter close
     /// quorum, clock advances past the vote window, executeVote runs the
-    /// script through the real registry/executor/Agent transport.
-    function _runGovernanceVote(Action[] memory actions, string memory tag, uint256 voterCount) internal {
+    /// script through the real registry/executor/Agent transport. Returns the
+    /// vote id and the complete recorded log stream for caller-side payload
+    /// and event binding (CONF-04: not just event-count credit).
+    function _runGovernanceVote(Action[] memory actions, string memory tag, uint256 voterCount)
+        internal
+        returns (uint256 voteId, RouterForkVm.Log[] memory logs)
+    {
         _holdingsChecks(tag);
         bytes memory script = _callsScript(actions);
         uint256 votesBefore = IRouterVoting(VOTING).votesLength();
 
         rvf.recordLogs();
         fvm.prank(HISTORIC_HOLDER);
-        uint256 voteId = IRouterVoting(VOTING).newVote(script, tag, false, false);
+        voteId = IRouterVoting(VOTING).newVote(script, tag, false, false);
         require(voteId == votesBefore, "FORK_REAL_GOVERNANCE_TRANSPORT vote id");
 
         (,, uint64 startDate, uint64 snapshotBlock,,,,,,) = IRouterVoting(VOTING).getVote(voteId);
@@ -1056,10 +1199,36 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         fvm.warp(uint256(startDate) + 7 days + 1 hours);
         require(IRouterVoting(VOTING).canExecute(voteId), "FORK_REAL_GOVERNANCE_TRANSPORT canExecute");
         IRouterVoting(VOTING).executeVote(voteId);
-        RouterForkVm.Log[] memory logs = rvf.getRecordedLogs();
+        logs = rvf.getRecordedLogs();
         require(_logCount(logs, VOTING, T_EXECUTE_VOTE) == 1, "FORK_REAL_GOVERNANCE_TRANSPORT ExecuteVote");
         require(_logCount(logs, VOTING, T_CAST_VOTE) == voterCount, "real casts observed");
         require(_logCount(logs, VOTING, T_START_VOTE) == 1, "StartVote observed");
+
+        // CONF-04: positively reread the executed flag — the ballot is
+        // proven consumed, not merely event-observed.
+        (, bool executedFlag,,,,,,,,) = IRouterVoting(VOTING).getVote(voteId);
+        require(executedFlag, string.concat(tag, " getVote.executed readback"));
+    }
+
+    /// @dev CONF-04: bind every governance action to its exact calldata at
+    /// BOTH layers — the outer D.execute(target,0,inner) call and the inner
+    /// target call the Agent performs — so passing scripts bind real
+    /// Agent/C/R payloads, not merely successful event signatures.
+    function _bindExpectedCalls(Action[] memory actions) internal {
+        for (uint256 i = 0; i < actions.length; ++i) {
+            fvm.expectCall(actions[i].target, actions[i].data);
+            if (actions[i].target == DAO && actions[i].data.length > 4) {
+                bytes memory d = actions[i].data;
+                bytes memory tail = new bytes(d.length - 4);
+                for (uint256 j = 0; j < tail.length; ++j) {
+                    tail[j] = d[j + 4];
+                }
+                (address innerTarget, uint256 innerValue, bytes memory innerData) =
+                    abi.decode(tail, (address, uint256, bytes));
+                require(innerValue == 0, "FORK_REAL_GOVERNANCE_TRANSPORT explicit zero ETH value");
+                fvm.expectCall(innerTarget, innerData);
+            }
+        }
     }
 
     function test_Fork_RealGovernanceInstallGrantAndHandback() public {
@@ -1069,6 +1238,9 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         // transport bindings re-read live (fail closed, no guessed selectors)
         address kernel = IRouterAgent(DAO).kernel();
         require(kernel != address(0), "FORK_REAL_GOVERNANCE_TRANSPORT kernel");
+        address acl = IRouterKernel(kernel).acl();
+        require(acl != address(0), "FORK_REAL_GOVERNANCE_TRANSPORT acl bound");
+        require(IRouterVoting(VOTING).token() == CRV_VOTING_TOKEN, "FORK_REAL_GOVERNANCE_TRANSPORT voting token bound");
         require(
             IRouterScriptRegistry(SCRIPT_REGISTRY).getScriptExecutor(abi.encodePacked(bytes4(0x00000001)))
                 == CALLS_EXECUTOR,
@@ -1092,7 +1264,10 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
                 address(r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, address(t.lister), true)
             )
         );
-        _runGovernanceVote(install, "router-exec install", 2);
+        _bindExpectedCalls(install);
+        (, RouterForkVm.Log[] memory installLogs) = _runGovernanceVote(install, "router-exec install", 2);
+        require(_logCount(installLogs, CONTROLLER, T_COMMIT_OWNERSHIP) == 1, "install CommitOwnership frame observed");
+        require(_logCount(installLogs, address(r), T_ADDER_SET) == 1, "install AdderSet frame observed");
 
         assertEq(_c().admin(), address(r), "FORK_REAL_GOVERNANCE_TRANSPORT seated by genuine vote");
         assertEq(_c().future_admin(), address(r), "future R kept (stale, real behaviour)");
@@ -1101,70 +1276,189 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         assertFalse(r.retired(), "active after install");
         require(!r.retired() && _c().admin() == address(r), "readbacks bound together");
 
-        // ---- separate genuine vote completes the handback through R
-        Action[] memory handback = new Action[](2);
+        // ---- separate genuine vote completes the PRESCRIBED handback.
+        // CONF-02: the governance action list now matches the authority
+        // encoder exactly (review/routerplan/encode_payload.py handback:
+        // grant(L,false), commit_transfer_ownership(successor),
+        // apply_transfer_ownership()) per DEPLOYMENT:73 "revoke L and all
+        // other delegated adders for an interrupted transition".
+        Action[] memory handback = new Action[](3);
         handback[0] = Action(
+            DAO,
+            _agentCalldata(
+                address(r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, address(t.lister), false)
+            )
+        );
+        handback[1] = Action(
             DAO,
             _agentCalldata(
                 address(r), abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, DAO)
             )
         );
-        handback[1] = Action(
+        handback[2] = Action(
             DAO,
             _agentCalldata(address(r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector))
         );
-        _runGovernanceVote(handback, "router-exec handback", 2);
+        _bindExpectedCalls(handback);
+        (, RouterForkVm.Log[] memory hbLogs) = _runGovernanceVote(handback, "router-exec handback", 2);
+        require(_logCount(hbLogs, address(r), T_ADDER_SET) == 1, "handback AdderSet(revoke) frame observed");
+        require(
+            _logCount(hbLogs, address(r), keccak256("ControllerTransferCommitted(address)")) == 1,
+            "handback Committed frame observed"
+        );
+        require(
+            _logCount(hbLogs, address(r), keccak256("ControllerTransferApplied(address)")) == 1,
+            "handback Applied frame observed"
+        );
+        require(_logCount(hbLogs, CONTROLLER, T_COMMIT_OWNERSHIP) == 1, "handback CommitOwnership frame observed");
 
         assertEq(_c().admin(), DAO, "FORK_REAL_GOVERNANCE_TRANSPORT handback restored D by genuine vote");
         assertTrue(r.retired(), "FORK_REAL_GOVERNANCE_TRANSPORT router retired");
         assertEq(r.pendingControllerAdmin(), address(0), "pending cleared by genuine apply");
+        // CONF-02: the prescribed sequence REVOKES before handing back —
+        // the flag must actually be cleared by the genuine vote.
+        assertFalse(r.isAdder(address(t.lister)), "FORK_REAL_GOVERNANCE_TRANSPORT prescribed handback revoked L");
+
+        // retired R is inert under the restored DAO administration
+        (bool inertOk, bytes memory inertRet) = _callFromAddr(
+            DAO, address(r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
+        );
+        require(
+            !inertOk && keccak256(inertRet) == keccak256(_routerErr(GaugeControllerAdmin.Retired.selector, "")),
+            "retired R still mutates"
+        );
     }
+
+    bytes32 internal constant EXECUTE_ROLE = keccak256("EXECUTE_ROLE");
+    bytes32 internal constant CREATE_VOTES_ROLE = keccak256("CREATE_VOTES_ROLE");
 
     function test_Fork_GovernanceWrongCallerAndAclNegative() public {
         _freshFork();
         _assertActorsDistinct();
-        GaugeControllerAdmin r = _router();
+        // CONF-04: the row's actual composition fixture — a real fresh
+        // unchanged L behind the seated router, so the prescribed C/R/L
+        // action set is read against the real objects, not role names.
+        RouterTrio memory t = _deployRouterTrio(10_000);
+        GaugeControllerAdmin r = t.router;
         _seatRouter(r); // mechanics seating so the wrong-caller negative
         // targets a genuinely seated router
 
         // ACL precondition reads with the ACTUAL target/value/selector
         // context (not role-name inference):
-        _f10AclReads();
+        _f10AclReads(r, address(t.lister));
 
         // genuinely passed script targeting R DIRECTLY (Voting context)
         address simHolder = _f10WrongCallerBallot(r);
 
-        // positive control: SAME real route, legitimately addressed via D
+        // positive control: SAME action and arguments, legitimately
+        // addressed via D/Agent
         _f10GenuineRoute(r, simHolder);
 
-        // outsider D.execute fails the genuine ACL
-        (bool x1,) = _callFromAddr(
-            rando(), DAO, abi.encodePacked(AGENT_EXECUTE_SELECTOR, abi.encode(CONTROLLER, uint256(0), hex""))
-        );
+        // CONF-04: outsider D.execute on a prescribed action with REAL
+        // calldata must fail the genuine ACL with the exact observed
+        // failure bytes (previously: empty C calldata, discarded bytes).
+        bytes memory outsiderCommit =
+            abi.encodeWithSelector(_c().commit_transfer_ownership.selector, actor("f10 outsider successor"));
+        fvm.expectCall(DAO, _agentCalldata(CONTROLLER, outsiderCommit));
+        address futureBefore = _c().future_admin();
+        (bool x1, bytes memory x1Ret) = _callFromAddr(rando(), DAO, _agentCalldata(CONTROLLER, outsiderCommit));
         require(!x1, "FORK_GOVERNANCE_WRONG_CALLER outsider agent call");
+        require(
+            keccak256(x1Ret) == keccak256(abi.encodeWithSignature("Error(string)", "APP_AUTH_FAILED")),
+            "FORK_GOVERNANCE_WRONG_CALLER outsider exact ACL failure"
+        );
+        require(_c().future_admin() == futureBefore, "outsider attempt moved nothing");
     }
 
-    function _f10AclReads() internal view {
+    /// @dev DEPLOYMENT:16 obligation, parameter-specific: the ACL check with
+    /// the actual [uint160(target), value, uint32(selector), 0] evidence
+    /// context for EACH prescribed C/R/L action (commit/apply on C via D;
+    /// grant/commit/apply on R; conditional unpause setPaused on L), plus
+    /// outsider negatives on the same specific actions. Role-name or
+    /// unparameterized reads alone are not permission evidence.
+    function _f10AclReads(GaugeControllerAdmin r, address l) internal view {
         address kernel = IRouterAgent(DAO).kernel();
         require(kernel != address(0), "kernel");
         address acl = IRouterKernel(kernel).acl();
+        require(acl != address(0), "acl");
         require(
-            IRouterAcl(acl).hasPermission(address(type(uint160).max), VOTING, keccak256("CREATE_VOTES_ROLE")),
+            IRouterAcl(acl).hasPermission(address(type(uint160).max), VOTING, CREATE_VOTES_ROLE),
             "FORK_GOVERNANCE_WRONG_CALLER create role open"
         );
         require(
-            IRouterAcl(acl).hasPermission(VOTING, DAO, keccak256("EXECUTE_ROLE")),
+            IRouterAcl(acl).hasPermission(VOTING, DAO, EXECUTE_ROLE),
             "FORK_GOVERNANCE_WRONG_CALLER agent execute role (Voting actor)"
         );
+        // The verified pin grants this route WITHOUT parameter-restricting
+        // context (params length 0): the per-action reads below still bind
+        // the exact triples, and any future parameterization reddens here.
+        require(
+            IRouterAcl(acl).getPermissionParamsLength(VOTING, DAO, EXECUTE_ROLE) == 0,
+            "FORK_GOVERNANCE_WRONG_CALLER execute role unparameterized at pin"
+        );
+        require(
+            _canPerform(acl, VOTING, CONTROLLER, IControllerVenue.commit_transfer_ownership.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER canPerform commit(C) Voting context"
+        );
+        require(
+            _canPerform(acl, VOTING, CONTROLLER, IControllerVenue.apply_transfer_ownership.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER canPerform apply(C) Voting context"
+        );
+        require(
+            _canPerform(acl, VOTING, address(r), GaugeControllerAdmin.grant.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER canPerform grant(R) Voting context"
+        );
+        require(
+            _canPerform(acl, VOTING, address(r), GaugeControllerAdmin.commit_transfer_ownership.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER canPerform commit(R) Voting context"
+        );
+        require(
+            _canPerform(acl, VOTING, address(r), GaugeControllerAdmin.apply_transfer_ownership.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER canPerform apply(R) Voting context"
+        );
+        require(
+            _canPerform(acl, VOTING, l, CurveGaugeLister.setPaused.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER canPerform unpause(L) Voting context"
+        );
+        // outsider denied on the very same specific actions
+        require(
+            !_canPerform(acl, rando(), CONTROLLER, IControllerVenue.commit_transfer_ownership.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER outsider canPerform commit(C) denied"
+        );
+        require(
+            !_canPerform(acl, rando(), address(r), GaugeControllerAdmin.grant.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER outsider canPerform grant(R) denied"
+        );
+    }
+
+    function _canPerform(address acl, address who, address actionTarget, bytes4 actionSelector)
+        internal
+        view
+        returns (bool)
+    {
+        // DEPLOYMENT:16 evidence: [uint160(target), value, uint32(selector)]
+        // as Aragon Permission words ((arg << 8) | ethValue).
+        uint256[] memory context = new uint256[](3);
+        context[0] = uint256(uint160(actionTarget)) << 8;
+        context[1] = 0; // every prescribed action sends exactly zero ETH value
+        context[2] = uint256(uint32(actionSelector)) << 8;
+        return IRouterAcl(acl).hasPermission(who, DAO, EXECUTE_ROLE, context);
     }
 
     /// @dev Builds, passes and executes a DIRECT-targeting script: R must
     /// see caller=Voting (not D) and reject; the executed flag rolls back.
     function _f10WrongCallerBallot(GaugeControllerAdmin r) internal returns (address simHolder) {
         Action[] memory direct = new Action[](1);
-        // DIRECTLY targeting R (no D/agent hop): the callee sees V, not D
-        direct[0] = Action(address(r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, rando(), true));
+        // DIRECTLY targeting R (no D/agent hop): the callee sees V, not D.
+        // CONF-04: the SAME action and arguments as the legitimate control
+        // below (commit of the approved successor), so the witnessed
+        // difference is exactly the caller chain, not the payload.
+        bytes memory commitR = abi.encodeWithSelector(
+            GaugeControllerAdmin.commit_transfer_ownership.selector, actor("f10 approved successor")
+        );
+        direct[0] = Action(address(r), commitR);
         _holdingsChecks("FORK_GOVERNANCE_WRONG_CALLER");
+        fvm.expectCall(address(r), commitR); // the exact R payload IS attempted
         fvm.prank(HISTORIC_HOLDER);
         uint256 voteId = IRouterVoting(VOTING).newVote(_callsScript(direct), "router-exec wrong-caller", false, false);
         (bool open, bool execFlag,, uint64 snapshotBlock,,,,,,) = IRouterVoting(VOTING).getVote(voteId);
@@ -1178,7 +1472,10 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         fvm.warp(uint256(block.timestamp) + 7 days + 2 hours);
         require(IRouterVoting(VOTING).canExecute(voteId), "FORK_GOVERNANCE_WRONG_CALLER canExecute");
 
-        vm.expectRevert(); // the inner NotDao(V) propagates as a hard revert
+        // CONF-04: enforce the exact observed cause — the inner NotDao(V)
+        // propagates as a hard revert. A bare expectRevert could be
+        // satisfied by any unrelated downstream failure.
+        vm.expectRevert(abi.encodeWithSelector(GaugeControllerAdmin.NotDao.selector, VOTING));
         IRouterVoting(VOTING).executeVote(voteId);
 
         // executed flag rolled back with the whole script; nothing took effect
@@ -1191,6 +1488,8 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
 
     function _f10GenuineRoute(GaugeControllerAdmin r, address simHolder) internal {
         Action[] memory good = new Action[](1);
+        // CONF-04: identical action and successor as the failed direct
+        // ballot; the only change is the legitimate D/Agent routing.
         good[0] = Action(
             DAO,
             _agentCalldata(
@@ -1200,6 +1499,7 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
                 )
             )
         );
+        _bindExpectedCalls(good);
         uint256 beforeVotes = IRouterVoting(VOTING).votesLength();
         fvm.prank(HISTORIC_HOLDER);
         uint256 voteId2 = IRouterVoting(VOTING).newVote(_callsScript(good), "router-exec acl positive", false, false);
@@ -1211,10 +1511,387 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         fvm.warp(uint256(block.timestamp) + 7 days + 2 hours);
         require(IRouterVoting(VOTING).canExecute(voteId2), "positive canExecute");
         IRouterVoting(VOTING).executeVote(voteId2);
+        (, bool positiveExecuted,,,,,,,,) = IRouterVoting(VOTING).getVote(voteId2);
+        require(positiveExecuted, "FORK_GOVERNANCE_WRONG_CALLER positive executed readback");
         assertEq(
             r.pendingControllerAdmin(),
             actor("f10 approved successor"),
             "FORK_GOVERNANCE_WRONG_CALLER genuine route works"
         );
+    }
+
+    // ------------------------------------------------------------------
+    // F11 (CONF-01) — selected Paris artifact, full lifecycle
+    // ------------------------------------------------------------------
+
+    /// @notice CONF-01: the exact SELECTED Paris deployment artifact (the
+    /// default-profile build under out/) is independently bound (full
+    /// runtime byte identity, getter AND embedded-literal immutables) and
+    /// then LIFE-CYCLED on the real controller at the fixed pin: seating,
+    /// both L lanes (paid + DAO-free) through the granted adder,
+    /// independent D administration, revocation and handback — real
+    /// executions, not artifact checks. Deliberately separate from the
+    /// Cancun-analog rows F02–F10 (whose creation bytes differ; asserted
+    /// profile separation here) and from production address/approval
+    /// selection, which remains open. D impersonation here is disclosed
+    /// lower-level mechanics, never a production transaction.
+    function test_Fork_SelectedParisArtifactFullLifecycleRehearsal() public {
+        _freshFork();
+        _assertActorsDistinct();
+        GaugeControllerAdmin r = _installParisArtifact();
+        CurveGaugeLister l = _f11Compose(r);
+        // 1. Seating on the real C via the incumbent-D two-step.
+        _seatRouter(r);
+        // 2. Grant, then BOTH L lanes execute through the granted adder.
+        _grantLister(r, address(l), true);
+        assertTrue(r.isAdder(address(l)), "FORK_PARIS_LIFECYCLE grant applied");
+        address daoFreeGauge = _f11Lanes(r, l);
+        _f11RevokeAndDroute(r, l, daoFreeGauge);
+        _f11Handback(r, l);
+    }
+
+    /// @dev Fresh unchanged L wired to the Paris instance (DEPLOYMENT §1.2)
+    /// with real adapters bound by their owners, paused.
+    function _f11Compose(GaugeControllerAdmin r) internal returns (CurveGaugeLister l) {
+        _assertPrimaryProvenance();
+        VotiumAdapter va = new VotiumAdapter(CRVUSD, DAO, VOTIUM);
+        VoteMarketAdapter vma = new VoteMarketAdapter(CRVUSD, DAO, CRM, VM_DESTINATION);
+        _assertValidatorPinAtFork();
+        l = new CurveGaugeLister(
+            DAO,
+            CRVUSD,
+            address(r),
+            FEEDIST,
+            CurveGaugeLister.AdmissionConfig(METAREGISTRY, 8),
+            CurveGaugeLister.PlatformConfig(address(va), address(vma), 10_000),
+            TRUSTED_VALIDATOR
+        );
+        assertEq(l.controller(), address(r), "FORK_PARIS_LIFECYCLE L endpoint is the Paris instance");
+        assertEq(l.owner(), DAO, "FORK_PARIS_LIFECYCLE L owner D");
+        fvm.startPrank(DAO);
+        va.setLister(address(l));
+        vma.setLister(address(l));
+        fvm.stopPrank();
+        assertTrue(l.paused(), "FORK_PARIS_LIFECYCLE starts paused");
+    }
+
+    /// @dev Both lister lanes through the granted adder: DAO-free supplied
+    /// weight while paused, then the conditional unpause and the real paid
+    /// admission at raw zero.
+    function _f11Lanes(GaugeControllerAdmin r, CurveGaugeLister l) internal returns (address daoFreeGauge) {
+        require(!_isRegistered(GAUGE_LEGACY_PROBE), "legacy gauge candidate availability");
+        fvm.prank(DAO);
+        l.listGaugeNoEscrow(POOL_LEGACY_PROBE, GAUGE_LEGACY_PROBE, LEGACY_GAUGE_INDEX, LEGACY_HANDLER_ID, 4242);
+        assertEq(_c().get_gauge_weight(GAUGE_LEGACY_PROBE), 4242, "FORK_PARIS_LIFECYCLE dao-free supplied weight");
+        _assertI128Eq(
+            r.gauge_types(GAUGE_LEGACY_PROBE), LEGACY_GAUGE_TYPE, "dao-free membership via Paris read-through"
+        );
+        daoFreeGauge = GAUGE_LEGACY_PROBE;
+
+        _activate(l);
+        _fundPayer(payer(), 1);
+        _approveFee(address(l));
+        fvm.prank(payer());
+        l.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID);
+        assertEq(_c().get_gauge_weight(GAUGE_PRIMARY), 0, "FORK_PARIS_LIFECYCLE paid raw zero");
+        assertTrue(_isRegistered(GAUGE_PRIMARY), "FORK_PARIS_LIFECYCLE paid membership real");
+    }
+
+    /// @dev Independent D administration through the Paris router, then
+    /// revocation: both L lanes die at R's real NotAdder gate while D's own
+    /// route survives.
+    function _f11RevokeAndDroute(GaugeControllerAdmin r, CurveGaugeLister l, address daoFreeGauge) internal {
+        address indep = _synthGauge("f11 independent D add");
+        fvm.prank(DAO);
+        r.add_gauge(indep, int128(1), uint256(31337));
+        assertEq(_c().get_gauge_weight(indep), 31337, "FORK_PARIS_LIFECYCLE independent D weight");
+        int128 typesBefore = _c().n_gauge_types();
+        (bool atOk,) = _callFromAddr(
+            DAO,
+            address(r),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector, abi.encodeWithSignature("add_type(string)", "f11-type")
+            )
+        );
+        require(atOk && _c().n_gauge_types() == typesBefore + 1, "FORK_PARIS_LIFECYCLE D add_type");
+        (bool cwOk,) = _callFromAddr(
+            DAO,
+            address(r),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSignature("change_gauge_weight(address,uint256)", indep, uint256(88))
+            )
+        );
+        require(cwOk && _c().get_gauge_weight(indep) == 88, "FORK_PARIS_LIFECYCLE D change_gauge_weight");
+
+        _grantLister(r, address(l), false);
+        assertFalse(r.isAdder(address(l)), "FORK_PARIS_LIFECYCLE revoked");
+        // Revocation semantics for a fresh real candidate (exact NotAdder(L)
+        // on both lanes) are proven in F05's dedicated subfixtures and
+        // offline O20/I03; the frozen pin holds exactly two registry-verified
+        // unregistered candidates and both positive lanes above consumed
+        // them, so re-attempting here would test L's AlreadyListed/occupancy
+        // gates, not R's grant gate. Here: the flag flips and D's own route
+        // survives revocation.
+        address postRevoke = _synthGauge("f11 post revoke");
+        fvm.prank(DAO);
+        r.add_gauge(postRevoke, int128(0), uint256(7));
+        assertTrue(_isRegistered(postRevoke), "FORK_PARIS_LIFECYCLE D route survives revoke");
+    }
+
+    /// @dev Handback through the Paris instance with real-C frames; retired
+    /// for every mutation, reads survive, direct D administration restored.
+    function _f11Handback(GaugeControllerAdmin r, CurveGaugeLister l) internal {
+        l;
+        rvf.recordLogs();
+        fvm.prank(DAO);
+        r.commit_transfer_ownership(DAO);
+        fvm.prank(DAO);
+        r.apply_transfer_ownership();
+        RouterForkVm.Log[] memory hb = rvf.getRecordedLogs();
+        assertEq(_c().admin(), DAO, "FORK_PARIS_LIFECYCLE handback restored D");
+        assertTrue(r.retired(), "FORK_PARIS_LIFECYCLE retired");
+        assertEq(r.pendingControllerAdmin(), address(0), "FORK_PARIS_LIFECYCLE pending cleared");
+        require(
+            _logCount(hb, address(r), keccak256("ControllerTransferCommitted(address)")) == 1
+                && _logCount(hb, address(r), keccak256("ControllerTransferApplied(address)")) == 1
+                && _logCount(hb, CONTROLLER, T_COMMIT_OWNERSHIP) == 1,
+            "FORK_PARIS_LIFECYCLE handback event frames"
+        );
+
+        (bool inert,) =
+            _callFromAddr(DAO, address(r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, rando(), true));
+        require(!inert, "FORK_PARIS_LIFECYCLE retired R mutating");
+        _assertI128Eq(r.n_gauge_types(), _c().n_gauge_types(), "FORK_PARIS_LIFECYCLE retired reads survive");
+        address postHandback = _synthGauge("f11 post handback direct");
+        fvm.prank(DAO);
+        _c().add_gauge(postHandback, int128(0), uint256(5));
+        assertEq(_c().get_gauge_weight(postHandback), 5, "FORK_PARIS_LIFECYCLE direct D restored");
+    }
+
+    /// @dev Deploy the exact selected Paris artifact at the pin and bind it
+    /// independently: sizes decoded with metadata intact, full runtime byte
+    /// identity against the artifact, getter immutables AND embedded C/D
+    /// literals. The Cancun analog under out-fork must be a different
+    /// artifact, so a profile substitution cannot silently pass (CONF-01).
+    function _installParisArtifact() internal returns (GaugeControllerAdmin) {
+        string memory art = rvf.readFile("out/GaugeControllerAdmin.sol/GaugeControllerAdmin.json");
+        bytes memory creation = _hexToBytes(rvf.parseJsonString(art, "$.bytecode.object"));
+        bytes memory expectedRuntime = _hexToBytes(rvf.parseJsonString(art, "$.deployedBytecode.object"));
+        // The artifact's deployedBytecode carries the immutables as zero
+        // placeholders (they are patched by the creation code); the binding
+        // below independently proves the PATCHED runtime equals the deployed
+        // code of the same artifact deployed through forge's own
+        // deployCode loader — two independent deployment paths, one byte
+        // identity — plus getter readbacks and embedded-literal scans.
+        address viaCheat =
+            rvf.deployCode("out/GaugeControllerAdmin.sol/GaugeControllerAdmin.json", abi.encode(CONTROLLER, DAO));
+        require(viaCheat != address(0), "FORK_PARIS_LIFECYCLE deployCode reference instance");
+        bytes memory initcode = abi.encodePacked(creation, abi.encode(CONTROLLER, DAO));
+        require(initcode.length == 5396, "FORK_PARIS_LIFECYCLE selected initcode with two address arguments");
+        require(expectedRuntime.length + 64 <= initcode.length, "artifact runtime shorter than initcode");
+        uint256 senderBalBefore = address(this).balance;
+        address parisR;
+        assembly ("memory-safe") {
+            parisR := create(0, add(initcode, 0x20), mload(initcode))
+        }
+        require(address(this).balance == senderBalBefore, "FORK_PARIS_LIFECYCLE no value forwarded by construction");
+        require(parisR != address(0), "FORK_PARIS_LIFECYCLE Paris initcode deploy");
+        require(keccak256(parisR.code) == keccak256(viaCheat.code), "FORK_PARIS_LIFECYCLE full runtime byte identity");
+        require(parisR.code.length == 4786, "FORK_PARIS_LIFECYCLE selected Paris runtime size");
+        // The fork-profile (Cancun) analog must be a DIFFERENT artifact: a
+        // silent profile substitution cannot pass this rehearsal.
+        GaugeControllerAdmin cancunAnalog = _router();
+        require(address(cancunAnalog).code.length == 4683, "FORK_PARIS_LIFECYCLE Cancun analog size");
+        require(
+            keccak256(address(cancunAnalog).code) != keccak256(parisR.code), "FORK_PARIS_LIFECYCLE profile separation"
+        );
+        require(GaugeControllerAdmin(parisR).controller() == CONTROLLER, "FORK_PARIS_LIFECYCLE immutable C getter");
+        require(GaugeControllerAdmin(parisR).dao() == DAO, "FORK_PARIS_LIFECYCLE immutable D getter");
+        require(_containsBytes(parisR.code, bytes20(CONTROLLER)), "FORK_PARIS_LIFECYCLE C literal embedded");
+        require(_containsBytes(parisR.code, bytes20(DAO)), "FORK_PARIS_LIFECYCLE D literal embedded");
+        require(!(_containsBytes(expectedRuntime, bytes20(CONTROLLER))), "artifact keeps immutable placeholders");
+        return GaugeControllerAdmin(parisR);
+    }
+
+    function _containsBytes(bytes memory haystack, bytes20 needle) internal pure returns (bool) {
+        for (uint256 i = 0; i + 20 <= haystack.length; ++i) {
+            bool hit = true;
+            for (uint256 j = 0; j < 20; ++j) {
+                if (haystack[i + j] != needle[j]) {
+                    hit = false;
+                    break;
+                }
+            }
+            if (hit) return true;
+        }
+        return false;
+    }
+
+    // ------------------------------------------------------------------
+    // F12 (CONF-02) — interrupted-installation rollback and recovery
+    // ------------------------------------------------------------------
+
+    /// @notice CONF-02 (DEPLOYMENT:15 with §4 rows "Only S1 committed",
+    /// "Atomic S1–S3 fails" and nominee replacement), rehearsed through the
+    /// REAL Voting→CallsScript→Agent transport for every grouped step so
+    /// atomicity is genuine, disclosed lower-level mechanics elsewhere:
+    /// (1) an atomic S1+S2+S3 ballot whose S3 grant is invalid reverts the
+    /// whole install with no trace; (2) with S1 committed in an EARLIER
+    /// successful ballot, a later atomic S2+S3 group that fails at S3
+    /// leaves the S1 commitment surviving — the exact state the prescribed
+    /// cleanup C.commit_transfer_ownership(D) resolves (admin/future both
+    /// read back D; pending R is never allowed to apply); (3) recovery
+    /// proceeds with nominee replacement and a corrected install to a
+    /// working seated composition whose paid lane admits.
+    function test_Fork_InterruptedSeatingRollbackAndRecovery() public {
+        _freshFork();
+        _assertActorsDistinct();
+        RouterTrio memory t = _deployRouterTrio(10_000);
+        GaugeControllerAdmin r = t.router;
+        _f12AtomicAllOrNothing(r);
+        _f12InterruptedCleanup(r);
+        _f12Recovery(t, r);
+    }
+
+    /// @dev Phase (1): atomic S1+S2+S3 with an invalid S3 grant reverts the
+    /// whole install — no trace, vote not executed.
+    function _f12AtomicAllOrNothing(GaugeControllerAdmin r) internal {
+        bytes memory cCommitR = abi.encodeWithSelector(_c().commit_transfer_ownership.selector, address(r));
+        bytes memory cApply = abi.encodeWithSelector(_c().apply_transfer_ownership.selector);
+        bytes memory grantBad = abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, address(r), true);
+        bytes memory invalidAdderCause = abi.encodeWithSelector(GaugeControllerAdmin.InvalidAdder.selector, address(r));
+        Action[] memory atomicFail = new Action[](3);
+        atomicFail[0] = Action(DAO, _agentCalldata(CONTROLLER, cCommitR));
+        atomicFail[1] = Action(DAO, _agentCalldata(CONTROLLER, cApply));
+        atomicFail[2] = Action(DAO, _agentCalldata(address(r), grantBad));
+        uint256 failVoteA = _runFailingGovernanceVote(atomicFail, "f12 atomic-fail", invalidAdderCause);
+        assertEq(_c().admin(), DAO, "FORK_INTERRUPTED atomic failure left admin D");
+        assertEq(_c().future_admin(), DAO, "FORK_INTERRUPTED atomic failure left future D");
+        assertFalse(r.isAdder(address(r)), "FORK_INTERRUPTED no grant persisted");
+        assertTrue(!r.retired() && r.pendingControllerAdmin() == address(0), "FORK_INTERRUPTED R untouched");
+        (, bool execAfter,,,,,,,,) = IRouterVoting(VOTING).getVote(failVoteA);
+        require(!execAfter, "FORK_INTERRUPTED failed ballot not executed");
+    }
+
+    /// @dev Phase (2): S1 alone in an earlier successful ballot; pending R
+    /// cannot self-apply; the later atomic S2+S3 group fails at S3 so its
+    /// own apply rolls back while the S1 commitment survives; the prescribed
+    /// cleanup D→C.commit_transfer_ownership(D) restores admin=D/future=D
+    /// and the never-seated R stays closed at its incumbent guard.
+    function _f12InterruptedCleanup(GaugeControllerAdmin r) internal {
+        bytes memory cCommitR = abi.encodeWithSelector(_c().commit_transfer_ownership.selector, address(r));
+        bytes memory cApply = abi.encodeWithSelector(_c().apply_transfer_ownership.selector);
+        bytes memory grantBad = abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, address(r), true);
+        bytes memory invalidAdderCause = abi.encodeWithSelector(GaugeControllerAdmin.InvalidAdder.selector, address(r));
+
+        Action[] memory s1Only = new Action[](1);
+        s1Only[0] = Action(DAO, _agentCalldata(CONTROLLER, cCommitR));
+        _runGovernanceVote(s1Only, "f12 s1-only", 2);
+        assertEq(_c().admin(), DAO, "FORK_INTERRUPTED S1-only admin still D");
+        assertEq(_c().future_admin(), address(r), "FORK_INTERRUPTED S1-only future R");
+        (bool selfApply,) = _callFromAddr(address(r), CONTROLLER, cApply);
+        require(!selfApply, "pending R self-applied");
+
+        Action[] memory groupFail = new Action[](2);
+        groupFail[0] = Action(DAO, _agentCalldata(CONTROLLER, cApply));
+        groupFail[1] = Action(DAO, _agentCalldata(address(r), grantBad));
+        _runFailingGovernanceVote(groupFail, "f12 s23-fail", invalidAdderCause);
+        assertEq(_c().admin(), DAO, "FORK_INTERRUPTED group failure rolled back its own apply");
+        assertEq(_c().future_admin(), address(r), "FORK_INTERRUPTED earlier S1 commit survived");
+
+        fvm.prank(DAO);
+        _c().commit_transfer_ownership(DAO);
+        assertEq(_c().admin(), DAO, "FORK_INTERRUPTED cleanup admin D");
+        assertEq(_c().future_admin(), DAO, "FORK_INTERRUPTED cleanup future D");
+        (bool inertAdd, bytes memory inertRet) = _callFromAddr(
+            DAO,
+            address(r),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.add_gauge.selector, _synthGauge("f12 inert"), int128(0), uint256(0)
+            )
+        );
+        require(
+            !inertAdd
+                && keccak256(inertRet)
+                    == keccak256(_routerErr(GaugeControllerAdmin.NotControllerAdmin.selector, abi.encode(DAO))),
+            "FORK_INTERRUPTED never-seated R mutated"
+        );
+    }
+
+    /// @dev Phase (3): recovery — nominee replacement before apply, corrected
+    /// atomic S2+S3 ballot to a seated composition, a real paid admission,
+    /// and the §4 handback route (revoke then commit/apply to D).
+    function _f12Recovery(RouterTrio memory t, GaugeControllerAdmin r) internal {
+        fvm.prank(DAO);
+        _c().commit_transfer_ownership(address(r));
+        address altNominee = actor("f12 superseded nominee");
+        fvm.prank(DAO);
+        _c().commit_transfer_ownership(altNominee);
+        assertEq(_c().future_admin(), altNominee, "FORK_INTERRUPTED replacement follows latest commit");
+        fvm.prank(DAO);
+        _c().commit_transfer_ownership(address(r));
+
+        Action[] memory recover = new Action[](2);
+        recover[0] =
+            Action(DAO, _agentCalldata(CONTROLLER, abi.encodeWithSelector(_c().apply_transfer_ownership.selector)));
+        recover[1] = Action(
+            DAO,
+            _agentCalldata(
+                address(r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, address(t.lister), true)
+            )
+        );
+        _bindExpectedCalls(recover);
+        _runGovernanceVote(recover, "f12 recover", 2);
+        assertEq(_c().admin(), address(r), "FORK_INTERRUPTED recovered install seated R");
+        assertTrue(r.isAdder(address(t.lister)), "FORK_INTERRUPTED recovered grant applied");
+        assertFalse(r.retired(), "recovered R active");
+
+        _fundPayer(payer(), 1);
+        _approveFee(address(t.lister));
+        _activate(t.lister);
+        fvm.prank(payer());
+        t.lister.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID);
+        assertTrue(_isRegistered(GAUGE_PRIMARY), "FORK_INTERRUPTED recovered composition admits");
+        assertEq(_c().get_gauge_weight(GAUGE_PRIMARY), 0, "recovered paid raw zero");
+
+        _grantLister(r, address(t.lister), false);
+        fvm.prank(DAO);
+        r.commit_transfer_ownership(DAO);
+        fvm.prank(DAO);
+        r.apply_transfer_ownership();
+        assertEq(_c().admin(), DAO, "FORK_INTERRUPTED final handback restored D");
+        assertTrue(r.retired(), "FORK_INTERRUPTED final handback retired R");
+    }
+
+    /// @dev Real ballot whose executeVote MUST revert with the exact bubbled
+    /// inner failure (all-or-nothing script semantics; DEPLOYMENT:39 "A
+    /// downstream revert rolls back the whole script"). Returns the vote id;
+    /// the executed flag stays false by assertion at the caller.
+    function _runFailingGovernanceVote(Action[] memory actions, string memory tag, bytes memory wantRevert)
+        internal
+        returns (uint256 voteId)
+    {
+        _holdingsChecks(tag);
+        bytes memory script = _callsScript(actions);
+        uint256 votesBefore = IRouterVoting(VOTING).votesLength();
+        fvm.prank(HISTORIC_HOLDER);
+        voteId = IRouterVoting(VOTING).newVote(script, tag, false, false);
+        require(voteId == votesBefore, "failing vote id");
+        (,, uint64 startDate, uint64 snapshotBlock,,,,,,) = IRouterVoting(VOTING).getVote(voteId);
+        require(snapshotBlock == FORK_BLOCK - 1, "snapshot below head");
+        _castYea(voteId, HISTORIC_HOLDER);
+        address simHolder = actor(string.concat(tag, "-funded-sim-holder"));
+        uint256 power = IRouterEscrow(CRV_VOTING_TOKEN).totalSupplyAt(snapshotBlock);
+        uint256 needed = power * 31 / 100;
+        uint256 realYea = IRouterEscrow(CRV_VOTING_TOKEN).balanceOfAt(HISTORIC_HOLDER, snapshotBlock);
+        uint256 simBias = needed > realYea ? needed - realYea + 1 : 1;
+        _fundSimulatedHolder(simHolder, simBias, FORK_TIMESTAMP - 60, FORK_BLOCK - 2);
+        _castYea(voteId, simHolder);
+        fvm.warp(uint256(startDate) + 7 days + 1 hours);
+        require(IRouterVoting(VOTING).canExecute(voteId), "failing ballot canExecute");
+        // enforce the exact bubbled cause, not any revert
+        vm.expectRevert(wantRevert);
+        IRouterVoting(VOTING).executeVote(voteId);
     }
 }

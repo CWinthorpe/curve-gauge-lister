@@ -72,16 +72,44 @@ contract GaugeControllerAdminTest is RouterHarness {
         // Constructor negatives (helper keeps the stack shallow).
         _ctorNegatives(f);
 
-        // Constructor is nonpayable: raw CREATE with value must fail.
-        require(!_createWithValue(address(f.c), address(f.dao), 1), "CTOR_EXPLICIT_PINS constructor accepted value");
+        // Constructor value witness (helper keeps the stack shallow).
+        _ctorValueWitness(f);
     }
 
-    /// @dev Value-attached construction through an assembly-create launcher:
-    /// a nonpayable constructor must reject the callvalue.
-    function _createWithValue(address c, address d, uint256 value) internal returns (bool deployed) {
+    /// @dev CONF-03(a): with the immediate CREATE executor itself funded, a
+    /// value-attached raw CREATE must fail at the constructor's own
+    /// callvalue check, and the identical bytes must deploy at zero value
+    /// from the same funded launcher. The only variable is msg.value;
+    /// OutOfFunds is excluded by the launcher balance read-back.
+    function _ctorValueWitness(Fixture memory f) internal {
+        (bool zeroOk, bytes memory zeroReason, address zeroLauncher) = _createWithValue(address(f.c), address(f.dao), 0);
+        require(zeroOk && zeroReason.length == 0, "CTOR_EXPLICIT_PINS deployable funded-launcher zero-value control");
+        require(address(zeroLauncher).balance == 0, "CTOR_EXPLICIT_PINS zero-value control consumed nothing");
+        (bool valOk, bytes memory valReason, address valLauncher) = _createWithValue(address(f.c), address(f.dao), 1);
+        require(!valOk, "CTOR_EXPLICIT_PINS constructor accepted value");
+        require(valReason.length == 0, "CTOR_EXPLICIT_PINS value rejected at constructor callvalue check");
+        require(
+            address(valLauncher).balance == 1, "CTOR_EXPLICIT_PINS launcher funded, OutOfFunds excluded, value refunded"
+        );
+    }
+
+    /// @dev Value-attached construction through a FUNDED assembly-create
+    /// launcher: a nonpayable constructor must reject the callvalue. Returns
+    /// the deployment result, the captured sub-create revert data, and the
+    /// launcher address (whose balance proves the executor was funded).
+    function _createWithValue(address c, address d, uint256 value)
+        internal
+        returns (bool deployed, bytes memory reason, address launcherAddr)
+    {
         ValueLauncher launcher = new ValueLauncher();
+        launcherAddr = address(launcher);
+        // Fund the immediate CREATE executor itself with exactly the probe
+        // value; an unfunded launcher would fail with OutOfFunds before the
+        // constructor's nonpayable check ever ran.
+        rv.deal(launcherAddr, value);
         bytes memory code = abi.encodePacked(type(GaugeControllerAdmin).creationCode, abi.encode(c, d));
         deployed = launcher.launch(code, value);
+        reason = launcher.lastRevert();
     }
 
     function _ctorNegatives(Fixture memory f) internal {
@@ -240,12 +268,15 @@ contract GaugeControllerAdminTest is RouterHarness {
             "GRANT_ONLY_REQUESTED_KEY cleared raw flag"
         );
 
-        // double revoke still emits
+        // double revoke still emits (CONF-04: idempotent-revoke event check)
+        vm.expectEmit(true, false, false, true, address(f.r));
+        emit GaugeControllerAdmin.AdderSet(l, false);
         _grant(f, l, false);
 
         // Negative: forbidden adders rejected before any write/log
         address[4] memory bad = [address(0), address(f.r), address(f.c), address(f.dao)];
         bytes4 sel = GaugeControllerAdmin.InvalidAdder.selector;
+        rv.recordLogs();
         for (uint256 i = 0; i < bad.length; ++i) {
             (bool ok, bytes memory ret) = _callFrom(
                 address(f.dao), address(f.r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, bad[i], true)
@@ -253,6 +284,11 @@ contract GaugeControllerAdminTest is RouterHarness {
             require(!ok && _isError(ret, sel, abi.encode(bad[i])), "GRANT_ONLY_REQUESTED_KEY invalid adder");
             assertFalse(f.r.isAdder(bad[i]), "invalid adder never flagged");
         }
+        // no AdderSet log was produced by any invalid call
+        require(
+            _countTopic(rv.getRecordedLogs(), address(f.r), keccak256("AdderSet(address,bool)")) == 0,
+            "GRANT_ONLY_REQUESTED_KEY invalid calls emitted nothing"
+        );
 
         // Independence: revoking one key must not touch another
         _grant(f, other, true);
@@ -319,14 +355,35 @@ contract GaugeControllerAdminTest is RouterHarness {
         require(keccak256(ogRet) == keccak256(_notDao(callers[0])), "ADMIN_NON_D_GRANT_REJECT exact data");
         assertFalse(m.r.isAdder(actor("z")), "ADMIN_NON_D_GRANT_REJECT no effect");
 
-        for (uint256 ci = 1; ci < callers.length; ++ci) {
+        // CONF-04: EVERY owed actor × EVERY administrative selector (plus
+        // nested ownership-via-execute) on its ACTUAL fresh fixture — the
+        // C-role caller and the granted adder come from this fixture, not a
+        // prior one, and the outsider joins the full grid.
+        for (uint256 ci = 0; ci < callers.length; ++ci) {
             for (uint256 ai = 0; ai < adminCalls.length; ++ai) {
                 Fixture memory fx = _seatedFixture();
-                _grant(fx, callers[3], true); // the granted-adder caller
-                (bool ok, bytes memory ret) = _callFrom(callers[ci], address(fx.r), adminCalls[ai]);
-                require(!ok, "non-D admin call accepted");
-                require(keccak256(ret) == keccak256(_notDao(callers[ci])), "non-D admin wrong error");
-                require(fx.c.addAttempts() == 0 && fx.c.markCalls() == 0, "non-D admin touched C");
+                address caller;
+                if (ci == 0) {
+                    caller = actor("outsider");
+                } else if (ci == 1) {
+                    caller = address(this); // deployer
+                } else if (ci == 2) {
+                    caller = actor("lister-role"); // L role
+                } else if (ci == 3) {
+                    caller = address(fx.adder); // another GRANTED adder
+                    _grant(fx, caller, true);
+                    assertTrue(fx.r.isAdder(caller), "grid adder is genuinely granted");
+                } else {
+                    caller = address(fx.c); // C itself on its own fixture
+                }
+                (bool ok, bytes memory ret) = _callFrom(caller, address(fx.r), adminCalls[ai]);
+                require(!ok, "ADMIN_NON_D_GRANT_REJECT non-D admin call accepted");
+                require(keccak256(ret) == keccak256(_notDao(caller)), "non-D admin wrong error");
+                require(
+                    fx.c.addAttempts() == 0 && fx.c.markCalls() == 0 && fx.c.weightChangeCalls() == 0
+                        && fx.c.typeWeightChangeCalls() == 0,
+                    "non-D admin touched C"
+                );
                 require(fx.c.commitCalls() == 1 && fx.c.applyCalls() == 1, "non-D admin ownership");
                 require(fx.r.pendingControllerAdmin() == address(0) && !fx.r.retired(), "non-D admin state");
             }
@@ -680,6 +737,23 @@ contract GaugeControllerAdminTest is RouterHarness {
         }
     }
 
+    /// @dev CONF-04: the complete payload of an indexed single-topic
+    /// ControllerTransfer event — emitter, topic count AND the successor
+    /// word — not merely that some event of that kind appeared.
+    function _assertTransferEventTopic(
+        RV.Log[] memory logs,
+        address emitter,
+        bytes32 t0,
+        address successor,
+        string memory label
+    ) internal pure {
+        (bool fnd, RV.Log memory lg) = _find(logs, emitter, t0);
+        require(fnd, label);
+        require(lg.topics.length == 2, label);
+        require(lg.topics[1] == bytes32(uint256(uint160(successor))), label);
+        require(lg.data.length == 0, label);
+    }
+
     // ------------------------------------------------------------------
     // O10
     // ------------------------------------------------------------------
@@ -747,18 +821,27 @@ contract GaugeControllerAdminTest is RouterHarness {
         // typed commit x typed apply
         Fixture memory a = _seatedFixture();
         address sa = address(new RouterSuccessorMock());
+        rv.recordLogs();
         vm.prank(address(a.dao));
         a.r.commit_transfer_ownership(sa);
         require(a.r.pendingControllerAdmin() == sa && a.c.future_admin() == sa, "typed/typed pending");
         vm.prank(address(a.dao));
         a.r.apply_transfer_ownership();
         require(a.c.admin() == sa && a.r.retired() && a.r.pendingControllerAdmin() == address(0), "typed/typed done");
+        RV.Log[] memory aLogs = rv.getRecordedLogs();
+        // CONF-04: complete ownership event payloads, not just presence.
+        _assertTransferEventTopic(
+            aLogs, address(a.r), keccak256("ControllerTransferCommitted(address)"), sa, "typed commit event payload"
+        );
+        _assertTransferEventTopic(
+            aLogs, address(a.r), keccak256("ControllerTransferApplied(address)"), sa, "typed apply event payload"
+        );
 
         // execute commit x typed apply — named label BEFORE the apply so the
         // M06 mutant (unmediated ownership payloads) reddens here first.
         Fixture memory c = _seatedFixture();
         address sc = address(new RouterSuccessorMock());
-        (bool cok,) = _callFrom(
+        (bool cok, bytes memory cokRet) = _callFrom(
             address(c.dao),
             address(c.r),
             abi.encodeWithSelector(
@@ -767,6 +850,7 @@ contract GaugeControllerAdminTest is RouterHarness {
             )
         );
         require(cok, "execute commit ok");
+        require(keccak256(cokRet) == keccak256(abi.encode(new bytes(0))), "execute commit returns empty bytes");
         require(c.r.pendingControllerAdmin() == sc, "EXECUTE_COMMIT_RECORDS_PENDING");
         require(c.c.future_admin() == sc, "execute commit mirrors raw pending");
         rv.recordLogs();
@@ -777,11 +861,19 @@ contract GaugeControllerAdminTest is RouterHarness {
             _countTopic(cLogs, address(c.r), keccak256("ControllerTransferApplied(address)")) == 1,
             "applied event from typed apply"
         );
+        _assertTransferEventTopic(
+            cLogs,
+            address(c.r),
+            keccak256("ControllerTransferApplied(address)"),
+            sc,
+            "execute-commit typed-apply payload"
+        );
         require(c.c.admin() == sc && c.r.retired(), "execute/typed done");
 
         // typed commit x execute apply (empty execute return)
         Fixture memory b = _seatedFixture();
         address sb = address(new RouterSuccessorMock());
+        rv.recordLogs();
         vm.prank(address(b.dao));
         b.r.commit_transfer_ownership(sb);
         (bool bok, bytes memory bret) = _callFrom(
@@ -796,6 +888,21 @@ contract GaugeControllerAdminTest is RouterHarness {
         // returned bytes = abi-encoded empty bytes
         require(keccak256(bret) == keccak256(abi.encode(new bytes(0))), "execute apply returns empty bytes");
         require(b.c.admin() == sb && b.r.retired(), "typed/execute done");
+        RV.Log[] memory bLogs = rv.getRecordedLogs();
+        _assertTransferEventTopic(
+            bLogs,
+            address(b.r),
+            keccak256("ControllerTransferCommitted(address)"),
+            sb,
+            "typed-commit execute-apply payload"
+        );
+        _assertTransferEventTopic(
+            bLogs,
+            address(b.r),
+            keccak256("ControllerTransferApplied(address)"),
+            sb,
+            "typed-commit execute-apply payload"
+        );
 
         // execute commit x execute apply
         Fixture memory d = _seatedFixture();
@@ -828,9 +935,28 @@ contract GaugeControllerAdminTest is RouterHarness {
             _countTopic(dLogs, address(d.r), keccak256("ControllerTransferApplied(address)")) == 1,
             "applied event before Executed"
         );
+        _assertTransferEventTopic(
+            dLogs, address(d.r), keccak256("ControllerTransferCommitted(address)"), sd, "execute-commit payload"
+        );
+        _assertTransferEventTopic(
+            dLogs, address(d.r), keccak256("ControllerTransferApplied(address)"), sd, "execute-apply payload"
+        );
         require(
             _countTopic(dLogs, address(d.r), keccak256("Executed(bytes4,bytes32,bytes32)")) == 2,
             "one Executed per execute call"
+        );
+        // CONF-04: BOTH execute return bytes asserted for the execute/execute
+        // ownership pair, not just the state outcome.
+        (bool dPeek, bytes memory dPeekRet) = _callFrom(
+            address(d.dao),
+            address(d.r),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
+            )
+        );
+        require(
+            !dPeek && _isError(dPeekRet, GaugeControllerAdmin.Retired.selector, ""), "post-apply execute return witness"
         );
         // ordering: within the apply execute, Applied precedes its Executed
         int256 appliedAt = -1;
@@ -1021,6 +1147,8 @@ contract GaugeControllerAdminTest is RouterHarness {
         );
         require(aok && f.c.admin() == succ && f.r.retired(), "apply success control");
 
+        // CONF-04: full pre/post router+controller+log equality for every
+        // failed commit/apply, not just selected fields.
         // Negative: C commit reverts — exact error, full pre/post equality,
         // lock usable afterwards.
         Fixture memory g = _seatedFixture();
@@ -1033,13 +1161,16 @@ contract GaugeControllerAdminTest is RouterHarness {
         require(rok, "baseline ok");
         require(rret.length == 0, "baseline empty");
         g.c.setCommitMode(1, address(0)); // revert
+        O14Snap memory gPre = _o14Snap(g);
+        rv.recordLogs();
         (bool bok, bytes memory bret) = _callFrom(
             address(g.dao),
             address(g.r),
             abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("s2"))
         );
         require(!bok && _isError(bret, RouterControllerMock.MockRejected.selector, ""), "commit revert bubbles");
-        require(g.r.pendingControllerAdmin() == actor("s1"), "local effects rolled back");
+        _assertO14Eq(gPre, _o14Snap(g), "commit revert full rollback");
+        require(_o14RouterLogCount() == 0, "commit revert emitted nothing");
         require(g.c.commitCalls() == commitBefore + 1, "C effects rolled back");
         // lock usable after failed call
         _grant(g, actor("post-fail"), true);
@@ -1049,6 +1180,8 @@ contract GaugeControllerAdminTest is RouterHarness {
         Fixture memory h = _seatedFixture();
         address liar = actor("lying-future");
         h.c.setCommitMode(2, liar);
+        O14Snap memory hPre = _o14Snap(h);
+        rv.recordLogs();
         (bool lok, bytes memory lret) = _callFrom(
             address(h.dao),
             address(h.r),
@@ -1061,6 +1194,8 @@ contract GaugeControllerAdminTest is RouterHarness {
         );
         require(h.r.pendingControllerAdmin() == address(0), "lying commit rolled back");
         require(!h.r.retired() && h.c.admin() == address(h.r), "lying commit state intact");
+        _assertO14Eq(hPre, _o14Snap(h), "lying commit full rollback");
+        require(_o14RouterLogCount() == 0, "lying commit emitted nothing");
 
         // Negative: C apply reverts after a good commit — retirement and
         // nomination roll back together.
@@ -1069,12 +1204,16 @@ contract GaugeControllerAdminTest is RouterHarness {
         vm.prank(address(i.dao));
         i.r.commit_transfer_ownership(s4);
         i.c.setApplyMode(1, address(0));
+        O14Snap memory iPre = _o14Snap(i);
+        rv.recordLogs();
         (bool iok, bytes memory irect) = _callFrom(
             address(i.dao), address(i.r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
         );
         require(!iok && _isError(irect, RouterControllerMock.MockRejected.selector, ""), "apply revert bubbles");
         require(!i.r.retired() && i.r.pendingControllerAdmin() == s4, "apply rollback keeps nomination");
         require(i.c.admin() == address(i.r), "apply rollback keeps admin");
+        _assertO14Eq(iPre, _o14Snap(i), "apply revert full rollback");
+        require(_o14RouterLogCount() == 0, "apply revert emitted nothing");
 
         // Negative: C lies on apply (admin := wrong) — ControllerAdminMismatch.
         Fixture memory j = _seatedFixture();
@@ -1083,6 +1222,8 @@ contract GaugeControllerAdminTest is RouterHarness {
         j.r.commit_transfer_ownership(s5);
         address clobber = actor("wrong-admin");
         j.c.setApplyMode(2, clobber);
+        O14Snap memory jPre = _o14Snap(j);
+        rv.recordLogs();
         (bool jok, bytes memory jret) = _callFrom(
             address(j.dao), address(j.r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
         );
@@ -1093,6 +1234,8 @@ contract GaugeControllerAdminTest is RouterHarness {
         );
         require(!j.r.retired() && j.r.pendingControllerAdmin() == s5, "lying apply rolled back");
         require(j.c.admin() == address(j.r), "lying apply admin rolled back");
+        _assertO14Eq(jPre, _o14Snap(j), "lying apply full rollback");
+        require(_o14RouterLogCount() == 0, "lying apply emitted nothing");
 
         // Negative: artificial local/raw pending mismatch (mock-only).
         Fixture memory k = _seatedFixture();
@@ -1100,6 +1243,8 @@ contract GaugeControllerAdminTest is RouterHarness {
         vm.prank(address(k.dao));
         k.r.commit_transfer_ownership(s6);
         k.c.forceFuture(actor("raw-diverged")); // C future diverges from local pending
+        O14Snap memory kPre = _o14Snap(k);
+        rv.recordLogs();
         (bool kok, bytes memory kret) = _callFrom(
             address(k.dao), address(k.r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
         );
@@ -1109,6 +1254,55 @@ contract GaugeControllerAdminTest is RouterHarness {
             "apply PendingAdminMismatch(expected,actual)"
         );
         require(k.r.pendingControllerAdmin() == s6 && !k.r.retired(), "mismatch apply rolled back");
+        _assertO14Eq(kPre, _o14Snap(k), "mismatch apply full rollback");
+        require(_o14RouterLogCount() == 0, "mismatch apply emitted nothing");
+    }
+
+    struct O14Snap {
+        address pending;
+        bool retired;
+        bytes32 lockWord;
+        address admin;
+        address future;
+        uint256 commitCalls;
+        uint256 applyCalls;
+        uint256 addAttempts;
+        uint256 addCalls;
+        uint256 markCalls;
+    }
+
+    function _o14Snap(Fixture memory f) internal view returns (O14Snap memory s) {
+        return O14Snap({
+            pending: f.r.pendingControllerAdmin(),
+            retired: f.r.retired(),
+            lockWord: rv.load(address(f.r), bytes32(uint256(2))),
+            admin: f.c.admin(),
+            future: f.c.future_admin(),
+            commitCalls: f.c.commitCalls(),
+            applyCalls: f.c.applyCalls(),
+            addAttempts: f.c.addAttempts(),
+            addCalls: f.c.addCalls(),
+            markCalls: f.c.markCalls()
+        });
+    }
+
+    function _assertO14Eq(O14Snap memory a, O14Snap memory b, string memory label) internal pure {
+        require(keccak256(abi.encode(a)) == keccak256(abi.encode(b)), label);
+    }
+
+    /// @dev Router-emitted ownership/execute audit logs since the last
+    /// recordLogs: a failed commit/apply must leave no log trace.
+    function _o14RouterLogCount() internal returns (uint256 n) {
+        RV.Log[] memory logs = rv.getRecordedLogs();
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].topics.length == 0) continue;
+            bytes32 t0 = logs[i].topics[0];
+            if (
+                t0 == keccak256("Executed(bytes4,bytes32,bytes32)")
+                    || t0 == keccak256("ControllerTransferCommitted(address)")
+                    || t0 == keccak256("ControllerTransferApplied(address)")
+            ) n += 1;
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1396,23 +1590,7 @@ contract GaugeControllerAdminTest is RouterHarness {
         require(tok.balanceOf(address(f.r)) == 500, "FUNDS_NO_INTENDED_CUSTODY token stranded");
         require(address(f.c).balance == 0, "no value forwarded to C");
 
-        // Value is rejected on every lane.
-        (bool v1,) =
-            _callValue(address(f.r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, actor("v"), true), 1);
-        (bool v2,) = _callValue(
-            address(f.r),
-            abi.encodeWithSelector(GaugeControllerAdmin.add_gauge.selector, actor("g"), int128(0), uint256(0)),
-            1
-        );
-        (bool v3,) = _callValue(address(f.r), abi.encodeWithSelector(GaugeControllerAdmin.execute.selector, hex"12"), 1);
-        (bool v4,) = _callValue(
-            address(f.r), abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("s")), 1
-        );
-        (bool v5,) =
-            _callValue(address(f.r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector), 1);
-        (bool v6,) = _callValue(address(f.r), "", 1);
-        require(!v1 && !v2 && !v3 && !v4 && !v5 && !v6, "FUNDS_NO_INTENDED_CUSTODY value accepted");
-        require(!_createWithValue(address(f.c), address(f.dao), 1), "FUNDS_NO_INTENDED_CUSTODY payable constructor");
+        _valueSurfaceLanes(f);
 
         // No custody API of any kind.
         (bool s1,) = _callFrom(address(f.dao), address(f.r), abi.encodeWithSignature("sweep(address)", address(0)));
@@ -1427,6 +1605,167 @@ contract GaugeControllerAdminTest is RouterHarness {
         // Donations did not create authority: a non-D caller still cannot.
         (bool nx,) = _call(address(f.r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, actor("x"), true));
         require(!nx, "donation bought authority");
+    }
+
+    /// @dev CONF-03(a): the complete claimed external surface under value.
+    /// Each lane runs its same-caller authorized zero-value control first
+    /// (privileged positive controls prevent authorization masking), then
+    /// the 1-wei probe must die at the compiler's empty callvalue check.
+    /// Split per lane family to keep the frozen stack (no viaIR) shallow.
+    function _valueSurfaceLanes(Fixture memory f) internal {
+        _valueMutatorLanes(f);
+        _valueReadLanes(f);
+        _valueApplyLane(f);
+        _valueDispatchLanes(address(f.dao), f.r);
+        _valueConstructorProbe(address(f.c), address(f.dao));
+    }
+
+    function _valueMutatorLanes(Fixture memory f) internal {
+        address dCaller = address(f.dao);
+        address adderG = actor("value-granted-adder");
+        _grant(f, adderG, true);
+        _valueLanePrivileged(
+            dCaller,
+            f.r,
+            abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, actor("v-grant"), true),
+            abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, actor("v-grant2"), true),
+            "grant"
+        );
+        _valueLanePrivileged(
+            dCaller,
+            f.r,
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSignature("mark(address,uint256)", address(0), uint256(0))
+            ),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSignature("mark(address,uint256)", address(0), uint256(1))
+            ),
+            "execute"
+        );
+        _valueLanePrivileged(
+            dCaller,
+            f.r,
+            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("v-succ")),
+            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("v-succ2")),
+            "commit"
+        );
+        _valueLanePrivileged(
+            adderG,
+            f.r,
+            abi.encodeWithSelector(GaugeControllerAdmin.add_gauge.selector, actor("g-v1"), int128(0), uint256(0)),
+            abi.encodeWithSelector(GaugeControllerAdmin.add_gauge.selector, actor("g-v2"), int128(0), uint256(0)),
+            "add_gauge granted adder"
+        );
+    }
+
+    function _valueReadLanes(Fixture memory f) internal {
+        address dCaller = address(f.dao);
+        _valueLanePrivileged(
+            dCaller,
+            f.r,
+            abi.encodeWithSignature("controller()"),
+            abi.encodeWithSignature("controller()"),
+            "controller view"
+        );
+        _valueLanePrivileged(
+            dCaller, f.r, abi.encodeWithSignature("dao()"), abi.encodeWithSignature("dao()"), "dao view"
+        );
+        _valueLanePrivileged(
+            dCaller,
+            f.r,
+            abi.encodeWithSignature("isAdder(address)", actor("value-granted-adder")),
+            abi.encodeWithSignature("isAdder(address)", actor("value-granted-adder")),
+            "isAdder view"
+        );
+        _valueLanePrivileged(
+            dCaller,
+            f.r,
+            abi.encodeWithSignature("pendingControllerAdmin()"),
+            abi.encodeWithSignature("pendingControllerAdmin()"),
+            "pendingControllerAdmin view"
+        );
+        _valueLanePrivileged(
+            dCaller, f.r, abi.encodeWithSignature("retired()"), abi.encodeWithSignature("retired()"), "retired view"
+        );
+        _valueLanePrivileged(
+            dCaller,
+            f.r,
+            abi.encodeWithSignature("gauge_types(address)", actor("g-v1")),
+            abi.encodeWithSignature("gauge_types(address)", actor("g-v1")),
+            "gauge_types view"
+        );
+        _valueLanePrivileged(
+            dCaller,
+            f.r,
+            abi.encodeWithSignature("n_gauge_types()"),
+            abi.encodeWithSignature("n_gauge_types()"),
+            "n_gauge_types view"
+        );
+    }
+
+    function _valueApplyLane(Fixture memory f) internal {
+        Fixture memory fa = _seatedFixture();
+        vm.prank(address(fa.dao));
+        fa.r.commit_transfer_ownership(actor("v-apply-succ"));
+        (bool avOk, bytes memory avRet) = _callValueFrom(
+            address(fa.dao),
+            address(fa.r),
+            abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector),
+            1
+        );
+        require(!avOk && avRet.length == 0, "FUNDS_NO_INTENDED_CUSTODY apply value lane");
+        require(!fa.r.retired(), "apply value probe did not apply");
+        (bool a0Ok,) = _callValueFrom(
+            address(fa.dao),
+            address(fa.r),
+            abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector),
+            0
+        );
+        require(a0Ok && fa.r.retired(), "FUNDS_NO_INTENDED_CUSTODY apply control");
+        f;
+    }
+
+    function _valueDispatchLanes(address dCaller, GaugeControllerAdmin r) internal {
+        (bool rc0, bytes memory rc0Ret) = _callValueFrom(dCaller, address(r), "", 0);
+        require(!rc0 && rc0Ret.length == 0, "no valueless fallback path");
+        (bool rcV, bytes memory rcVRet) = _callValueFrom(dCaller, address(r), "", 1);
+        require(!rcV && rcVRet.length == 0, "FUNDS_NO_INTENDED_CUSTODY receive accepted value");
+        (bool ukV, bytes memory ukRet) = _callValueFrom(dCaller, address(r), hex"deadbeef", 1);
+        require(!ukV && ukRet.length == 0, "FUNDS_NO_INTENDED_CUSTODY unknown selector accepted value");
+    }
+
+    function _valueConstructorProbe(address c, address d) internal {
+        (bool ctorZero, bytes memory ctorZeroReason, address ctorZeroLauncher) = _createWithValue(c, d, 0);
+        require(ctorZero && ctorZeroReason.length == 0, "FUNDS_NO_INTENDED_CUSTODY deployable funded-launcher control");
+        (bool ctorVal, bytes memory ctorValReason, address ctorValLauncher) = _createWithValue(c, d, 1);
+        require(!ctorVal, "FUNDS_NO_INTENDED_CUSTODY payable constructor");
+        require(ctorValReason.length == 0, "FUNDS_NO_INTENDED_CUSTODY constructor rejection is the callvalue check");
+        require(
+            address(ctorValLauncher).balance == 1 && address(ctorZeroLauncher).balance == 0,
+            "constructor launcher funding"
+        );
+    }
+
+    /// @dev CONF-03(a) privileged value lane: the same caller first runs an
+    /// otherwise-successful authorized zero-value control, then the same
+    /// shape with 1 wei must revert with the compiler's empty callvalue-check
+    /// data. Sharing the caller means no earlier authorization failure can
+    /// mask a missing nonpayable arm.
+    function _valueLanePrivileged(
+        address caller,
+        GaugeControllerAdmin r,
+        bytes memory controlData,
+        bytes memory probeData,
+        string memory label
+    ) internal {
+        rv.deal(caller, 2);
+        (bool ok0,) = _callValueFrom(caller, address(r), controlData, 0);
+        require(ok0, string.concat("FUNDS_NO_INTENDED_CUSTODY authorized control ", label));
+        (bool okV, bytes memory retV) = _callValueFrom(caller, address(r), probeData, 1);
+        require(!okV, string.concat("FUNDS_NO_INTENDED_CUSTODY value accepted ", label));
+        require(retV.length == 0, string.concat("FUNDS_NO_INTENDED_CUSTODY callvalue-check cause ", label));
     }
 
     // ------------------------------------------------------------------
@@ -1541,16 +1880,39 @@ contract GaugeControllerAdminTest is RouterHarness {
         uint256 w1 = f.c.get_gauge_weight(actor("g-keep1"));
         uint256 w2 = f.c.get_gauge_weight(actor("g-keep2"));
 
-        // Revoke both; neither can add anymore.
+        // Revoke both. CONF-03(b): each negative INVOKES R FROM the revoked
+        // holder (the prior version called the holder contracts themselves,
+        // which died at shim dispatch and never reached R's NotAdder gate),
+        // and asserts the exact NotAdder(actor) with no C frame or effect.
+        // The granted controls above and the regrant control below stay.
         _grant(f, a1, false);
         _grant(f, a2, false);
-        (bool r1,) = _call(
-            a1, abi.encodeWithSelector(GaugeControllerAdmin.add_gauge.selector, actor("g-no1"), int128(0), uint256(0))
+        uint256 attemptsAtRevoke = f.c.addAttempts();
+        (bool r1ok, bytes memory r1ret) = _callFrom(
+            a1,
+            address(f.r),
+            abi.encodeWithSelector(GaugeControllerAdmin.add_gauge.selector, actor("g-no1"), int128(0), uint256(0))
         );
-        (bool r2,) = _call(
-            a2, abi.encodeWithSelector(GaugeControllerAdmin.add_gauge.selector, actor("g-no2"), int128(0), uint256(0))
+        require(!r1ok, "REVOCATION_PRESERVES_MEMBERSHIP revoked adder added");
+        require(
+            _isError(r1ret, GaugeControllerAdmin.NotAdder.selector, abi.encode(a1)),
+            "REVOCATION_PRESERVES_MEMBERSHIP revoked a1 exact NotAdder(a1)"
         );
-        require(!r1 && !r2, "REVOCATION_PRESERVES_MEMBERSHIP revoked adder added");
+        (bool r2ok, bytes memory r2ret) = _callFrom(
+            a2,
+            address(f.r),
+            abi.encodeWithSelector(GaugeControllerAdmin.add_gauge.selector, actor("g-no2"), int128(0), uint256(0))
+        );
+        require(!r2ok, "REVOCATION_PRESERVES_MEMBERSHIP second revoked adder added");
+        require(
+            _isError(r2ret, GaugeControllerAdmin.NotAdder.selector, abi.encode(a2)),
+            "REVOCATION_PRESERVES_MEMBERSHIP revoked a2 exact NotAdder(a2)"
+        );
+        require(f.c.addAttempts() == attemptsAtRevoke, "REVOCATION_PRESERVES_MEMBERSHIP revoked adds never reached C");
+        require(
+            !f.c.registered(actor("g-no1")) && !f.c.registered(actor("g-no2")),
+            "REVOCATION_PRESERVES_MEMBERSHIP revoked adds no C state"
+        );
 
         // Membership, count and weights are untouched by revocation.
         require(uint256(int256(f.c.n_gauges())) == nBefore, "REVOCATION_PRESERVES_MEMBERSHIP count");
@@ -1610,12 +1972,31 @@ contract Predictor {
 }
 
 /// @dev Raw CREATE launcher used to attempt value-attached construction.
+/// The immediate CREATE executor is funded by the test before launching so
+/// an environment OutOfFunds cannot mask (or fake) the constructor's own
+/// nonpayable callvalue rejection; `lastRevert` records the sub-create
+/// return data so the witness can assert the actual failure cause.
 contract ValueLauncher {
+    address public lastDeployed;
+    bytes public lastRevert;
+
     function launch(bytes memory code, uint256 value) external returns (bool) {
         address addr;
-        assembly ("memory-safe") {
+        assembly {
             addr := create(value, add(code, 0x20), mload(code))
         }
+        uint256 n;
+        assembly {
+            n := returndatasize()
+        }
+        bytes memory rd = new bytes(n);
+        if (n > 0) {
+            assembly {
+                returndatacopy(add(rd, 0x20), 0, n)
+            }
+        }
+        lastDeployed = addr;
+        lastRevert = rd;
         return addr != address(0);
     }
 

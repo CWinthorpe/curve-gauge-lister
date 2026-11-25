@@ -45,6 +45,18 @@ abstract contract RouterHarness is TestBase {
         (ok, ret) = target.call{value: value}(data);
     }
 
+    /// @dev prank + value-bearing low-level call. An authorized control and
+    /// its value probe come from the SAME otherwise-successful caller and
+    /// differ only in msg.value, so no earlier authorization rejection can
+    /// mask a missing nonpayable arm (CONF-03).
+    function _callValueFrom(address from, address target, bytes memory data, uint256 value)
+        internal
+        returns (bool ok, bytes memory ret)
+    {
+        vm.prank(from);
+        (ok, ret) = target.call{value: value}(data);
+    }
+
     function _revertMatches(bytes memory actual, bytes memory expected, string memory label) internal pure {
         require(keccak256(actual) == keccak256(expected), label);
     }
