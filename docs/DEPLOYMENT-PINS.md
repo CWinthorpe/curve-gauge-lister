@@ -9,7 +9,7 @@ Prospective Ethereum-mainnet configuration. These are intended pins and historic
 | Lister owner / CurveDAO Aragon org | `0x40907540d8a6C65c637785e8f8B742ae6b0b9968` |
 | crvUSD | `0xf939E0A03FB07F59A73314E73794Be0E57ac1b4E` |
 | GaugeController canonical registry/regression reference (NOT an approved production `controller_` value — see Production controller composition) | `0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB` |
-| Production `controller_` / separate DAO-controlled router | Address UNSELECTED; required composition specified below; never substitute the raw controller or an invented address |
+| Production `controller_` / separate DAO-controlled router | Implementation supplied at this commit as `contracts/GaugeControllerAdmin.sol` (see the verification-bindings section below); deployed address UNSELECTED; required composition specified below; never substitute the raw controller or an invented address |
 | crvUSD FeeDistributor | `0xD16d5eC345Dd86Fb63C6a9C43c517210F1027914` |
 | MetaRegistry | `0xF98B45FA17DE75FB1aD0e7aFD971b0ca00e379fC` |
 | Admission structural maxCoins | `8` |
@@ -18,7 +18,7 @@ Prospective Ethereum-mainnet configuration. These are intended pins and historic
 | VoteMarket local CampaignRemoteManager | `0x53ad4cd1f1e52dd02aa9fc4a8250a1b74f351ca2` |
 | VoteMarket remote destination, chain42161 | `0x8c2c5a295450ddff4cb360ca73fccc12243d14d9` |
 
-The controller row identifies the canonical raw GaugeController C, not an approved direct `controller_` value for this unchanged core. The selected composition specification is a separate DAO-controlled router R: construct the fresh lister L against R, install R as C's raw admin through the incumbent DAO's two-step governance action, and admit L as R's authorized adder. The DAO retains exclusive router control, independent registration, full raw administration, revocation and handback. R's implementation/address, independent review and actual grants remain OPEN; no existing GaugeAdder election is assumed. Retaining C's current admin prevents direct L→C additions, while seating L as raw admin strands administration and both transfer steps. Do not silently replace a pin. The impersonated raw-admin fork transfer remains regression-only, not a deployment instruction.
+The controller row identifies the canonical raw GaugeController C, not an approved direct `controller_` value for this unchanged core. The selected composition specification is a separate DAO-controlled router R: construct the fresh lister L against R, install R as C's raw admin through the incumbent DAO's two-step governance action, and admit L as R's authorized adder. The DAO retains exclusive router control, independent registration, full raw administration, revocation and handback. R's implementation is provided at this commit; its production address selection, deployment, independent review and actual grants remain OPEN; no existing GaugeAdder election is assumed. Retaining C's current admin prevents direct L→C additions, while seating L as raw admin strands administration and both transfer steps. Do not silently replace a pin. The impersonated raw-admin fork transfer remains regression-only, not a deployment instruction.
 
 The lister owner controls pause, prospective configurations and two-step ownership, not discretionary token withdrawal. It is an Aragon governance executor, not described here as a deployer multisig. Actual gauge kill roles are separate, implementation-specific upstream authorities; they are not new constructor dependencies or lister privileges.
 
@@ -32,6 +32,22 @@ The lister owner controls pause, prospective configurations and two-step ownersh
 ## Production controller composition — separate DAO-controlled router
 
 The composition specification is selected; router implementation/address, review, governance approval and activation remain OPEN. Define C as raw GaugeController `0x2F50D538606Fa9EDD2B11E2446BEb18C9D5846bB`, D as DAO executor `0x40907540d8a6C65c637785e8f8B742ae6b0b9968`, R as the separate router and L as the fresh lister. R/L are labels, not deployment pins.
+
+### Supplied router contract and verification bindings
+
+The router is candidate product, not a deployment claim. Before any seating vote becomes executable, the selected-deployment package must bind each field below for the actual instance; every value not yet chosen stays explicitly UNSELECTED (no probe addresses):
+
+| Binding field | Requirement |
+| --- | --- |
+| R source and artifact | `contracts/GaugeControllerAdmin.sol`, exact pragma 0.8.30, zero imports; compiler/profile pinned to the release policy (default profile: Paris, optimizer enabled/200, viaIR=false); local full-byte reproduction of creation and runtime (metadata included), never explorer verification alone |
+| Constructor and immutables | `(address controller_,address dao_)` nonpayable with the pinned C and D explicitly supplied; runtime independently bound to the artifact by full bytes with the embedded immutables patched, plus `controller()`/`dao()` readbacks and the two 20-byte literals located in the runtime |
+| ABI/layout | Full compiled surface equals `docs/ABI.md` (constructor, 12 external functions, 5 events, 14 declared errors; no receive/fallback); storage: `isAdder` slot 0 mapping, `pendingControllerAdmin` slot 1 offset 0, `retired` slot 1 offset 20, `_lock` slot 2; ceilings runtime <=24,576 and initcode-with-two-address-arguments <=49,152 under both profiles |
+| Initial-state readbacks | `pendingControllerAdmin()==0`, `retired()==false`, no grants beyond the approved set, deployer holds no authority; recorded at an explicit block/transaction identity with receipt/log identities |
+| Adder enumeration | The complete granted-adder set is reconstructed from all `AdderSet` logs since deployment and re-read at the release pin; the mapping alone is not trusted history |
+| Proposal/script bindings | Each seating/handback/unpause proposal binds the exact CallsScript bytes, per-action `(target, value=0, calldata)` tuples, proposal id, script hash and real executor/version, independently decoded before execution — not the template alone |
+| Governance route | Current Voting/Agent/proxy/Kernel/ACL implementation and role reads at one fresh fixed block, with per-action `canPerform(V, EXECUTE_ROLE, [uint160(target), 0, uint32(selector)])` checks for every C/R/L target action |
+
+Deployment operator identity, deploy nonce/salt, R address, adapter owners' binding transactions, the selected observation block for pre-production re-reads and all approvals above stay OPEN obligations; supplying them is separately authorized work, not this document.
 
 ### Verified live baseline
 

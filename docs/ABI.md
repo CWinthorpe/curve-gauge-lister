@@ -102,3 +102,58 @@ The new getter selector is `trustedGaugeValidator() = 0x3ca09961`. The only vali
 The full unchanged VotiumAdapter and VoteMarketAdapter ABIs/method identifiers are included in the manifest. Their constructors remain `(address crvUSD_,address owner_,address votium_)` and `(address crvUSD_,address owner_,address campaignRemoteManager_,address votemarket_)`, respectively.
 
 Both implement `rewardToken()`, `lister()` and `deposit(address gauge,uint256 scheduledEpoch,uint256 amount) returns (bytes32 receipt)`. `setLister(address)` is owner-authenticated and write-once. They accept deposits only from that bound core, use exact bounded token approvals and clear allowances (a zero approval request is one checked zero approval; the final allowance is always cleared to zero). VoteMarket also accepts native ETH through `receive()` as committed message float; neither adapter exposes withdrawal, rescue or arbitrary execution. Its `getDeposit`, `depositCount` and `depositAt` expose recorded L1 ingress from the adapter's own chain-1 log — receipt values are opaque adapter-domain identifiers (a keccak tuple plus a local ordinal) attested by the emitting adapter and its deposit events, not proof of asynchronous destination delivery. The compiled-ABI allowlist witness in `test/Adapters.t.sol` checks the fresh artifact's signature-key set against the intended allowlist in both directions plus one no-fallback calldata probe; it does not attest deployed-byte equality or enumerate the dispatcher — the exact runtime/immutables byte comparison is a distinct release gate recorded with the release evidence package (see `README.md`). See `OPERATIONS.md` for mutable venue settings, gas arithmetic and residual-loss limits.
+
+
+## GaugeControllerAdmin — fixed-authority DAO controller router (role R)
+
+This is the additional shipped contract of the selected composition; every core/adapter description above is unchanged by it. The router is a new standalone manifest: the lister's three-function dependency subset in `contracts/interfaces/IListingController.sol` was not widened, and R declares its narrow controller interface locally (zero imports, exact `pragma solidity 0.8.30`). Compiled-surface equality against this section and the normative manifest is an owner-held candidate gate; this prose does not substitute for that comparison.
+
+### Constructor
+
+`(address controller_,address dao_)`, nonpayable. Both parameters are explicit, never derived from `msg.sender`/`tx.origin`, and stored as embedded immutables. Construction rejects `controller_ == 0` or `== address(this)` with `InvalidController(controller_)`, a code-less `controller_` with `NoCode(controller_)`, and `dao_` equal to zero, `address(this)` or `controller_` with `InvalidDao(dao_)`. There is deliberately no requirement that `controller_`'s admin be R at construction (deployment precedes installation), no requirement that `dao_` have code in the reusable ABI (production verification must pin its literal D address, chain 1 and real governance route separately), no auto-grants, no token calls, no value acceptance and no authority transfer.
+
+### Storage
+
+`controller` and `dao` are embedded immutables (no slots). `isAdder` is `mapping(address=>bool)` at slot 0 (key location `keccak256(abi.encode(key,uint256(0)))`); `pendingControllerAdmin` is an `address` at slot 1 offset 0; `retired` is a `bool` at slot 1 offset 20; the single mutual-exclusion word `_lock` is a `uint256` at slot 2, initially 1 (idle), 2 while entered. There are no other persistent fields: no adder array, no lister economics record, no controller cache, no epoch/budget/nonce/fee/allowance/delegate state. The public mapping plus `AdderSet` logs allow off-chain enumeration; the adder set at any release pin must be reconstructed from deployment logs and re-read, because no getter grants more than the rules below.
+
+### Complete callable surface (12 external functions, 5 events, 14 declared errors)
+
+Views/getters (public, lock-free, callable after retirement; they confer no write capability):
+
+- `controller()` -> `address` (immutable C)
+- `dao()` -> `address` (immutable D)
+- `isAdder(address)` -> `bool` (raw grant flag; history, not a promise of present capability after retirement or authority loss)
+- `pendingControllerAdmin()` -> `address` (local fresh nomination; zero means no fresh R-authorized commit)
+- `retired()` -> `bool` (permanent lifecycle latch)
+- `gauge_types(address)` -> `int128` — typed STATICCALL read-through to C; a valid stored zero is preserved, an absent gauge reverts with C's exact upstream bytes (including an empty revert), and a malformed upstream return reverts rather than fabricating membership
+- `n_gauge_types()` -> `int128` — typed read-through of C's canonical exclusive type bound
+
+Nonpayable mutators (authority checked first, then retirement, then the single shared lock):
+
+- `grant(address adder,bool enabled)` — D only; rejects `adder` equal to zero, R, C or D with `InvalidAdder(adder)` before any effect; writes the flag and emits `AdderSet(adder,enabled)` even when unchanged. Usable after deployment but before seating: `grant` is an authorization-key lane, not a controller-mutating lane.
+- `add_gauge(address gauge,int128 gaugeType,uint256 weight)` — D or a currently granted `msg.sender` (`NotAdder(caller)` otherwise); additionally requires C.admin() == R at R's own guard (`NotControllerAdmin(actual)`; that revert is R's guard, never a reached raw call). Synchronous `C.add_gauge` with the exact arguments — R adds no type/weight clamp, fee, validator, pool, pause, gauge-code or registry policy — and emits `GaugeAdded` only after C returns.
+- `execute(bytes data)` — D only. One ordinary zero-value CALL whose destination is only the immutable C: the ABI carries no target and no value. It is arbitrary valid CONTROLLER function execution, not arbitrary-target forwarding. Ownership selectors are mediated (below); every other payload reaches C unchanged, keeps C's exact return bytes, and bubbles C's failure bytes exactly, including an empty revert. `Executed` is emitted only on success, hashing the full input and returned byte arrays; it is an audit record, not a governance approval, fee receipt or emissions event, and never substitutes for the raw controller's own events.
+- `commit_transfer_ownership(address successor)` — D only; the shared commit.
+- `apply_transfer_ownership()` — D only; the shared apply.
+
+There is no receive or fallback function; no other external entry exists.
+
+### Ownership encoding rule
+
+`execute(bytes)` decodes only the leading inner selector. For `commit_transfer_ownership(address)` the complete input must be exactly 36 bytes with a canonical 160-bit address word (upper bits zero); for `apply_transfer_ownership()` exactly 4 bytes. Anything else fails with `InvalidOwnershipCalldata()` before any C call, state write or log. Valid ownership payloads route to the SAME internal commit/apply state machine as the typed methods (returning empty bytes; the ownership event precedes `Executed`) — no raw-call escape bypasses retirement. `Executed` uses `selector = 0` for inputs shorter than four bytes.
+
+### Shared commit/apply law
+
+Commit requires C.admin() == R (`NotControllerAdmin`), rejects successor zero/R/C (`InvalidSuccessor`), sets the local nomination, calls C.commit as R, requires `C.future_admin()` to equal the nomination (`PendingAdminMismatch(expected,actual)`) and emits `ControllerTransferCommitted`. Any failure rolls back local and C effects together (same transaction). Apply requires C.admin() == R and a fresh local nomination (`NoPendingTransfer`) — C's `future_admin` is stale after seating and is never proof — then saves the successor, clears the nomination, latches `retired = true` BEFORE the external `C.apply_transfer_ownership()` as the incumbent, requires `C.admin()` to equal the successor (`ControllerAdminMismatch(expected,actual)`) and emits `ControllerTransferApplied`. Any revert/postcondition failure rolls back retirement, nomination, controller state and logs together. Both steps are incumbent-only; a pending successor never accepts. Two-step does not mean two transactions or a delay.
+
+### Lifecycle limits and funding boundary
+
+After a successful handback apply, ALL mutations revert permanently with `Retired()` — including `grant` and generic `execute` of otherwise-public controller functions — even when called by D; stale grant flags are history, not capability. Canonical reads survive. There is no selfdestruct and no revival/rescue/accept/cancel/rename surface; a pending transfer neither transfers authority nor pauses adds, and D may leave a nomination pending or replace it with another valid successor. Production handback policy revokes delegated adders first; the state machine deliberately does not require that, and retirement never erases historical grant flags. A retired router must never be reseated. R has no intended custody or money-handling path (nonpayable everywhere, zero-value C calls, no deposit/withdrawal/rescue/sweep/approve API and no balance-dependent behavior), but forced ETH and unsolicited ERC20 balances can arrive and remain stranded: they create no privilege, block no operation, and no recovery API exists or may be assumed. Upstream reverts bubble unwrapped; standard ABI-decoding and nonpayable/unknown-selector rejections are compiler behavior, not additional declared errors.
+
+### Errors (14, exact)
+
+No-argument: `Retired()`, `ReentrantCall()`, `InvalidOwnershipCalldata()`. Address-bearing: `InvalidController(address controller)`, `NoCode(address target)`, `InvalidDao(address dao)`, `NotDao(address caller)`, `NotAdder(address caller)`, `NotControllerAdmin(address actual)`, `InvalidAdder(address adder)`, `InvalidSuccessor(address successor)`, `NoPendingTransfer()`. Two-address: `PendingAdminMismatch(address expected,address actual)`, `ControllerAdminMismatch(address expected,address actual)`.
+
+### Events (5, exact)
+
+`AdderSet(address indexed adder,bool enabled)`, `GaugeAdded(address indexed caller,address indexed gauge,int128 gaugeType,uint256 weight)`, `Executed(bytes4 indexed selector,bytes32 calldataHash,bytes32 returndataHash)`, `ControllerTransferCommitted(address indexed successor)`, `ControllerTransferApplied(address indexed successor)`.
