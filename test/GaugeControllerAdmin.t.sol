@@ -334,7 +334,11 @@ contract GaugeControllerAdminTest is RouterHarness {
         callers[3] = actor("other-adder");
         callers[4] = address(p1.c); // C itself
 
-        bytes[] memory adminCalls = new bytes[](5);
+        // routerfix5 (c) / review/ROUTERCONF2.md:218-223: the nested
+        // ownership cell must carry BOTH mediated arms — the array previously
+        // covered only execute(commit(...)); execute(apply_transfer_ownership
+        // ()) is added, so every actor attempts the nested apply too.
+        bytes[] memory adminCalls = new bytes[](6);
         adminCalls[0] = abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, actor("z"), true);
         adminCalls[1] = abi.encodeWithSelector(
             GaugeControllerAdmin.execute.selector,
@@ -345,6 +349,10 @@ contract GaugeControllerAdminTest is RouterHarness {
         adminCalls[4] = abi.encodeWithSelector(
             GaugeControllerAdmin.execute.selector,
             abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("succ"))
+        );
+        adminCalls[5] = abi.encodeWithSelector(
+            GaugeControllerAdmin.execute.selector,
+            abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
         );
 
         // M05-critical first subcase: outsider grant must revert at the
@@ -409,7 +417,33 @@ contract GaugeControllerAdminTest is RouterHarness {
         assertEq(f.c.gauge_types(actor("gauge-a")), int128(1), "granted add control");
 
         // Negative: otherwise-valid outsider add.
-        uint256 attemptsBefore = f.c.addAttempts();
+        // routerfix5 (h)/O05 (review/ROUTERCONF.md:319-321, ROUTERCONF2.md:
+        // 263): EXPLICIT NEGATIVE LOG DELTA. The recording window opens with
+        // a live-recorder positive control — a granted add whose committed
+        // audit logs are compared as complete payloads — so the zero-delta
+        // observations for the rejected calls cannot be a silent recorder.
+        rv.recordLogs();
+        address pcGauge = actor("gauge-pc");
+        vm.prank(adder);
+        f.adder.addViaRouter(pcGauge, int128(1), uint256(4242));
+        RV.Log[] memory pcLogs = rv.getRecordedLogs();
+        uint256 attemptsBefore = f.c.addAttempts(); // after the live control
+        require(pcLogs.length > 0, "AUTH_UNLISTED_REJECT recorder live");
+        bytes32[] memory cT = new bytes32[](1);
+        cT[0] = keccak256("NewGauge(address,int128,uint256)");
+        require(
+            _countExactLogUnit(pcLogs, address(f.c), cT, abi.encode(pcGauge, int128(1), uint256(4242))) == 1,
+            "AUTH_UNLISTED_REJECT control NewGauge full payload"
+        );
+        bytes32[] memory rT = new bytes32[](3);
+        rT[0] = keccak256("GaugeAdded(address,address,int128,uint256)");
+        rT[1] = bytes32(uint256(uint160(adder)));
+        rT[2] = bytes32(uint256(uint160(pcGauge)));
+        require(
+            _countExactLogUnit(pcLogs, address(f.r), rT, abi.encode(int128(1), uint256(4242))) == 1,
+            "AUTH_UNLISTED_REJECT control GaugeAdded full payload"
+        );
+
         (bool ok, bytes memory ret) = _callFrom(
             outsider,
             address(f.r),
@@ -419,8 +453,16 @@ contract GaugeControllerAdminTest is RouterHarness {
         _revertMatches(ret, _notAdder(outsider), "AUTH_UNLISTED_REJECT exact data");
         require(f.c.addAttempts() == attemptsBefore, "AUTH_UNLISTED_REJECT no C call");
         require(!f.c.registered(actor("gauge-o")), "AUTH_UNLISTED_REJECT no C state");
+        // explicit negative log delta: the rejected outsider add contributed
+        // NO log entry from any emitter (differential read since the live
+        // control window).
+        require(rv.getRecordedLogs().length == 0, "AUTH_UNLISTED_REJECT negative log delta");
 
-        // Negative: revoked adder (was valid, then revoked).
+        // Negative: revoked adder (was valid, then revoked). The revoke is a
+        // deliberate authorized transition that commits exactly one
+        // AdderSet(adder,false) full payload INSIDE this window; the failed
+        // revoked add must then contribute nothing further — the committed
+        // delta and the negative delta are observed differentially.
         _grant(f, adder, false);
         (bool rok, bytes memory rret) = _callFrom(
             adder,
@@ -430,6 +472,15 @@ contract GaugeControllerAdminTest is RouterHarness {
         require(!rok, "AUTH_UNLISTED_REJECT revoked");
         _revertMatches(rret, _notAdder(adder), "AUTH_UNLISTED_REJECT revoked exact data");
         require(f.c.addAttempts() == attemptsBefore, "AUTH_UNLISTED_REJECT revoked no C call");
+        RV.Log[] memory revWindow = rv.getRecordedLogs();
+        require(revWindow.length == 1, "AUTH_UNLISTED_REJECT revoked window holds only the revoke log");
+        bytes32[] memory aT = new bytes32[](2);
+        aT[0] = keccak256("AdderSet(address,bool)");
+        aT[1] = bytes32(uint256(uint160(adder)));
+        require(
+            _countExactLogUnit(revWindow, address(f.r), aT, abi.encode(false)) == 1,
+            "AUTH_UNLISTED_REJECT revoke AdderSet full payload"
+        );
     }
 
     // ------------------------------------------------------------------
@@ -639,6 +690,10 @@ contract GaugeControllerAdminTest is RouterHarness {
         (bool k6,) =
             _exec09Run(f, abi.encodeWithSignature("change_type_weight(int128,uint256)", int128(2), uint256(77)));
         require(k5 && k6 && f.c.get_gauge_weight(actor("x1")) == 12, "raw weight changes");
+        // routerfix5 (h)/O09 (review/ROUTERCONF.md:319-321, ROUTERCONF2.md:
+        // 264): the change_type_weight lane must read back its LITERAL
+        // resulting weight, not merely a successful call flag.
+        require(f.c.type_weight(2) == 77, "raw change_type_weight literal resulting weight 77");
     }
 
     function _exec09RawReturns(Fixture memory f) internal {
@@ -754,6 +809,46 @@ contract GaugeControllerAdminTest is RouterHarness {
         require(lg.data.length == 0, label);
     }
 
+    /// @dev routerfix5 (h)/O05, (e)/O14, (f): complete single-log lookup —
+    /// emitter, the FULL topics array (length and every entry) and exact
+    /// data bytes. Topic0 counts alone never establish payload binding.
+    function _countExactLogUnit(RV.Log[] memory logs, address emitter, bytes32[] memory topics, bytes memory data)
+        internal
+        pure
+        returns (uint256 hits)
+    {
+        bytes32 wantDataHash = keccak256(data);
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].emitter != emitter) continue;
+            if (logs[i].topics.length != topics.length) continue;
+            bool same = true;
+            for (uint256 j = 0; j < topics.length; ++j) {
+                if (logs[i].topics[j] != topics[j]) {
+                    same = false;
+                    break;
+                }
+            }
+            if (!same) continue;
+            if (keccak256(logs[i].data) != wantDataHash) continue;
+            hits += 1;
+        }
+    }
+
+    /// @dev routerfix5 (e)/O14: full-array log equality in order — every
+    /// emitter, every complete topics array and every data payload.
+    function _logsEqUnit(RV.Log[] memory a, RV.Log[] memory b) internal pure returns (bool) {
+        if (a.length != b.length) return false;
+        for (uint256 i = 0; i < a.length; ++i) {
+            if (a[i].emitter != b[i].emitter) return false;
+            if (a[i].topics.length != b[i].topics.length) return false;
+            for (uint256 j = 0; j < a[i].topics.length; ++j) {
+                if (a[i].topics[j] != b[i].topics[j]) return false;
+            }
+            if (keccak256(a[i].data) != keccak256(b[i].data)) return false;
+        }
+        return true;
+    }
+
     // ------------------------------------------------------------------
     // O10
     // ------------------------------------------------------------------
@@ -841,6 +936,10 @@ contract GaugeControllerAdminTest is RouterHarness {
         // M06 mutant (unmediated ownership payloads) reddens here first.
         Fixture memory c = _seatedFixture();
         address sc = address(new RouterSuccessorMock());
+        // routerfix5 (d) / review/ROUTERCONF2.md:229-231: recording begins
+        // BEFORE the mediated commit so that commit's COMPLETE event payload
+        // is observed, not only the later typed apply's.
+        rv.recordLogs();
         (bool cok, bytes memory cokRet) = _callFrom(
             address(c.dao),
             address(c.r),
@@ -853,7 +952,6 @@ contract GaugeControllerAdminTest is RouterHarness {
         require(keccak256(cokRet) == keccak256(abi.encode(new bytes(0))), "execute commit returns empty bytes");
         require(c.r.pendingControllerAdmin() == sc, "EXECUTE_COMMIT_RECORDS_PENDING");
         require(c.c.future_admin() == sc, "execute commit mirrors raw pending");
-        rv.recordLogs();
         vm.prank(address(c.dao));
         c.r.apply_transfer_ownership();
         RV.Log[] memory cLogs = rv.getRecordedLogs();
@@ -867,6 +965,15 @@ contract GaugeControllerAdminTest is RouterHarness {
             keccak256("ControllerTransferApplied(address)"),
             sc,
             "execute-commit typed-apply payload"
+        );
+        // the execute-mediated commit's own committed payload, now inside the
+        // window: emitter, both topics and the successor word.
+        _assertTransferEventTopic(
+            cLogs,
+            address(c.r),
+            keccak256("ControllerTransferCommitted(address)"),
+            sc,
+            "execute-commit own committed payload observed"
         );
         require(c.c.admin() == sc && c.r.retired(), "execute/typed done");
 
@@ -908,7 +1015,11 @@ contract GaugeControllerAdminTest is RouterHarness {
         Fixture memory d = _seatedFixture();
         address sd = address(new RouterSuccessorMock());
         rv.recordLogs();
-        (bool dcOk,) = _callFrom(
+        // routerfix5 (d) / review/ROUTERCONF2.md:225-228: the execute/
+        // execute pair must CAPTURE AND ASSERT both SUCCESSFUL empty-byte
+        // execute returns — the retired-apply probe below is a separate
+        // negative and does not stand in for them.
+        (bool dcOk, bytes memory dcRet) = _callFrom(
             address(d.dao),
             address(d.r),
             abi.encodeWithSelector(
@@ -917,7 +1028,10 @@ contract GaugeControllerAdminTest is RouterHarness {
             )
         );
         require(dcOk, "execute commit before apply");
-        (bool dok,) = _callFrom(
+        require(
+            keccak256(dcRet) == keccak256(abi.encode(new bytes(0))), "execute/execute commit success return empty bytes"
+        );
+        (bool dok, bytes memory doRet) = _callFrom(
             address(d.dao),
             address(d.r),
             abi.encodeWithSelector(
@@ -926,6 +1040,9 @@ contract GaugeControllerAdminTest is RouterHarness {
             )
         );
         require(dok && d.c.admin() == sd && d.r.retired(), "execute/execute done");
+        require(
+            keccak256(doRet) == keccak256(abi.encode(new bytes(0))), "execute/execute apply success return empty bytes"
+        );
         RV.Log[] memory dLogs = rv.getRecordedLogs();
         require(
             _countTopic(dLogs, address(d.r), keccak256("ControllerTransferCommitted(address)")) == 1,
@@ -1147,12 +1264,21 @@ contract GaugeControllerAdminTest is RouterHarness {
         );
         require(aok && f.c.admin() == succ && f.r.retired(), "apply success control");
 
-        // CONF-04: full pre/post router+controller+log equality for every
-        // failed commit/apply, not just selected fields.
+        // routerfix5 (e) / review/ROUTERCONF2.md:233-240: every failure
+        // subcase now compares COMPLETE pre/post snapshots — router grant
+        // flags, pending/retired/lock word, controller ownership, counters
+        // and membership/type/weight state (seeded with real committed
+        // grants, adds, an add_type and both weight changes) — against the
+        // ACTUAL fixture, and observes a SUCCESSFUL post-failure mutator
+        // (reusable lock plus one exact committed AdderSet payload) after
+        // EVERY rejection, not only after the first one. The committed-vs-
+        // reverted log discipline of WITNESSES:10 (recorder trace logs are
+        // never mistaken for committed logs) is demonstrated below with an
+        // enclosing catch oracle.
+
         // Negative: C commit reverts — exact error, full pre/post equality,
-        // lock usable afterwards.
+        // lock reused by the helper's successful post-failure mutator.
         Fixture memory g = _seatedFixture();
-        uint256 commitBefore = g.c.commitCalls();
         (bool rok, bytes memory rret) = _callFrom(
             address(g.dao),
             address(g.r),
@@ -1161,41 +1287,27 @@ contract GaugeControllerAdminTest is RouterHarness {
         require(rok, "baseline ok");
         require(rret.length == 0, "baseline empty");
         g.c.setCommitMode(1, address(0)); // revert
-        O14Snap memory gPre = _o14Snap(g);
-        rv.recordLogs();
-        (bool bok, bytes memory bret) = _callFrom(
-            address(g.dao),
-            address(g.r),
-            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("s2"))
+        _o14Seed(g);
+        _o14NegFull(
+            g,
+            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("s2")),
+            abi.encodeWithSelector(RouterControllerMock.MockRejected.selector),
+            "commit revert"
         );
-        require(!bok && _isError(bret, RouterControllerMock.MockRejected.selector, ""), "commit revert bubbles");
-        _assertO14Eq(gPre, _o14Snap(g), "commit revert full rollback");
-        require(_o14RouterLogCount() == 0, "commit revert emitted nothing");
-        require(g.c.commitCalls() == commitBefore + 1, "C effects rolled back");
-        // lock usable after failed call
-        _grant(g, actor("post-fail"), true);
-        assertTrue(g.r.isAdder(actor("post-fail")), "lock released after failure");
 
         // Negative: C lies about future — PendingAdminMismatch(expected,actual)
         Fixture memory h = _seatedFixture();
         address liar = actor("lying-future");
         h.c.setCommitMode(2, liar);
-        O14Snap memory hPre = _o14Snap(h);
-        rv.recordLogs();
-        (bool lok, bytes memory lret) = _callFrom(
-            address(h.dao),
-            address(h.r),
-            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("s3"))
-        );
-        require(!lok, "lying commit accepted");
-        require(
-            _isError(lret, GaugeControllerAdmin.PendingAdminMismatch.selector, abi.encode(actor("s3"), liar)),
-            "PendingAdminMismatch(expected,actual)"
+        _o14Seed(h);
+        _o14NegFull(
+            h,
+            abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("s3")),
+            abi.encodeWithSelector(GaugeControllerAdmin.PendingAdminMismatch.selector, actor("s3"), liar),
+            "lying commit"
         );
         require(h.r.pendingControllerAdmin() == address(0), "lying commit rolled back");
         require(!h.r.retired() && h.c.admin() == address(h.r), "lying commit state intact");
-        _assertO14Eq(hPre, _o14Snap(h), "lying commit full rollback");
-        require(_o14RouterLogCount() == 0, "lying commit emitted nothing");
 
         // Negative: C apply reverts after a good commit — retirement and
         // nomination roll back together.
@@ -1204,16 +1316,15 @@ contract GaugeControllerAdminTest is RouterHarness {
         vm.prank(address(i.dao));
         i.r.commit_transfer_ownership(s4);
         i.c.setApplyMode(1, address(0));
-        O14Snap memory iPre = _o14Snap(i);
-        rv.recordLogs();
-        (bool iok, bytes memory irect) = _callFrom(
-            address(i.dao), address(i.r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
+        _o14Seed(i);
+        _o14NegFull(
+            i,
+            abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector),
+            abi.encodeWithSelector(RouterControllerMock.MockRejected.selector),
+            "apply revert"
         );
-        require(!iok && _isError(irect, RouterControllerMock.MockRejected.selector, ""), "apply revert bubbles");
         require(!i.r.retired() && i.r.pendingControllerAdmin() == s4, "apply rollback keeps nomination");
         require(i.c.admin() == address(i.r), "apply rollback keeps admin");
-        _assertO14Eq(iPre, _o14Snap(i), "apply revert full rollback");
-        require(_o14RouterLogCount() == 0, "apply revert emitted nothing");
 
         // Negative: C lies on apply (admin := wrong) — ControllerAdminMismatch.
         Fixture memory j = _seatedFixture();
@@ -1222,20 +1333,15 @@ contract GaugeControllerAdminTest is RouterHarness {
         j.r.commit_transfer_ownership(s5);
         address clobber = actor("wrong-admin");
         j.c.setApplyMode(2, clobber);
-        O14Snap memory jPre = _o14Snap(j);
-        rv.recordLogs();
-        (bool jok, bytes memory jret) = _callFrom(
-            address(j.dao), address(j.r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
-        );
-        require(!jok, "lying apply accepted");
-        require(
-            _isError(jret, GaugeControllerAdmin.ControllerAdminMismatch.selector, abi.encode(s5, clobber)),
-            "ControllerAdminMismatch(expected,actual)"
+        _o14Seed(j);
+        _o14NegFull(
+            j,
+            abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector),
+            abi.encodeWithSelector(GaugeControllerAdmin.ControllerAdminMismatch.selector, s5, clobber),
+            "lying apply"
         );
         require(!j.r.retired() && j.r.pendingControllerAdmin() == s5, "lying apply rolled back");
         require(j.c.admin() == address(j.r), "lying apply admin rolled back");
-        _assertO14Eq(jPre, _o14Snap(j), "lying apply full rollback");
-        require(_o14RouterLogCount() == 0, "lying apply emitted nothing");
 
         // Negative: artificial local/raw pending mismatch (mock-only).
         Fixture memory k = _seatedFixture();
@@ -1243,25 +1349,32 @@ contract GaugeControllerAdminTest is RouterHarness {
         vm.prank(address(k.dao));
         k.r.commit_transfer_ownership(s6);
         k.c.forceFuture(actor("raw-diverged")); // C future diverges from local pending
-        O14Snap memory kPre = _o14Snap(k);
-        rv.recordLogs();
-        (bool kok, bytes memory kret) = _callFrom(
-            address(k.dao), address(k.r), abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
-        );
-        require(!kok, "mismatched apply accepted");
-        require(
-            _isError(kret, GaugeControllerAdmin.PendingAdminMismatch.selector, abi.encode(s6, actor("raw-diverged"))),
-            "apply PendingAdminMismatch(expected,actual)"
+        _o14Seed(k);
+        _o14NegFull(
+            k,
+            abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector),
+            abi.encodeWithSelector(GaugeControllerAdmin.PendingAdminMismatch.selector, s6, actor("raw-diverged")),
+            "mismatch apply"
         );
         require(k.r.pendingControllerAdmin() == s6 && !k.r.retired(), "mismatch apply rolled back");
-        _assertO14Eq(kPre, _o14Snap(k), "mismatch apply full rollback");
-        require(_o14RouterLogCount() == 0, "mismatch apply emitted nothing");
+
+        _o14LogDiscipline();
     }
 
+    /// @dev routerfix5 (e): the COMPLETE relevant-state snapshot per WITNESSES
+    /// :10 — router grant flags (keyed), pending/retired/lock word, controller
+    /// ownership, every mock counter, and C membership/type/weight state for
+    /// the seeded gauges and type weights. Not a 3-field selection.
     struct O14Snap {
         address pending;
         bool retired;
         bytes32 lockWord;
+        bool gAdder;
+        bool gDao;
+        bool gDeployer;
+        bool gG1;
+        bool gPost;
+        bool gOutsider;
         address admin;
         address future;
         uint256 commitCalls;
@@ -1269,40 +1382,210 @@ contract GaugeControllerAdminTest is RouterHarness {
         uint256 addAttempts;
         uint256 addCalls;
         uint256 markCalls;
+        uint256 weightChangeCalls;
+        uint256 typeWeightChangeCalls;
+        int128 nGauges;
+        int128 nTypes;
+        bool regA;
+        bool regB;
+        int128 typeA;
+        int128 typeB;
+        uint256 weightA;
+        uint256 weightB;
+        uint256 tw0;
+        uint256 tw1;
+        uint256 tw2;
+        address lastAddSender;
+        address lastMarkTarget;
     }
 
     function _o14Snap(Fixture memory f) internal view returns (O14Snap memory s) {
-        return O14Snap({
-            pending: f.r.pendingControllerAdmin(),
-            retired: f.r.retired(),
-            lockWord: rv.load(address(f.r), bytes32(uint256(2))),
-            admin: f.c.admin(),
-            future: f.c.future_admin(),
-            commitCalls: f.c.commitCalls(),
-            applyCalls: f.c.applyCalls(),
-            addAttempts: f.c.addAttempts(),
-            addCalls: f.c.addCalls(),
-            markCalls: f.c.markCalls()
-        });
+        address ga = actor("o14-gauge-a");
+        address gb = actor("o14-gauge-b");
+        s.pending = f.r.pendingControllerAdmin();
+        s.retired = f.r.retired();
+        s.lockWord = rv.load(address(f.r), bytes32(uint256(2)));
+        s.gAdder = f.r.isAdder(address(f.adder));
+        s.gDao = f.r.isAdder(address(f.dao));
+        s.gDeployer = f.r.isAdder(address(this));
+        s.gG1 = f.r.isAdder(actor("o14-g1"));
+        s.gPost = f.r.isAdder(actor("o14-post"));
+        s.gOutsider = f.r.isAdder(actor("outsider"));
+        s.admin = f.c.admin();
+        s.future = f.c.future_admin();
+        s.commitCalls = f.c.commitCalls();
+        s.applyCalls = f.c.applyCalls();
+        s.addAttempts = f.c.addAttempts();
+        s.addCalls = f.c.addCalls();
+        s.markCalls = f.c.markCalls();
+        s.weightChangeCalls = f.c.weightChangeCalls();
+        s.typeWeightChangeCalls = f.c.typeWeightChangeCalls();
+        s.nGauges = f.c.n_gauges();
+        s.nTypes = f.c.n_gauge_types();
+        s.regA = f.c.registered(ga);
+        s.regB = f.c.registered(gb);
+        if (s.regA) {
+            s.typeA = f.c.gauge_types(ga);
+            s.weightA = f.c.get_gauge_weight(ga);
+        } else {
+            s.typeA = int128(999); // absence sentinel: never a fabricated read
+        }
+        if (s.regB) {
+            s.typeB = f.c.gauge_types(gb);
+            s.weightB = f.c.get_gauge_weight(gb);
+        } else {
+            s.typeB = int128(999);
+        }
+        s.tw0 = f.c.type_weight(0);
+        s.tw1 = f.c.type_weight(1);
+        s.tw2 = f.c.type_weight(2);
+        s.lastAddSender = f.c.lastAddSender();
+        s.lastMarkTarget = f.c.lastMarkTarget();
     }
 
     function _assertO14Eq(O14Snap memory a, O14Snap memory b, string memory label) internal pure {
         require(keccak256(abi.encode(a)) == keccak256(abi.encode(b)), label);
     }
 
-    /// @dev Router-emitted ownership/execute audit logs since the last
-    /// recordLogs: a failed commit/apply must leave no log trace.
-    function _o14RouterLogCount() internal returns (uint256 n) {
-        RV.Log[] memory logs = rv.getRecordedLogs();
-        for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].topics.length == 0) continue;
-            bytes32 t0 = logs[i].topics[0];
-            if (
-                t0 == keccak256("Executed(bytes4,bytes32,bytes32)")
-                    || t0 == keccak256("ControllerTransferCommitted(address)")
-                    || t0 == keccak256("ControllerTransferApplied(address)")
-            ) n += 1;
-        }
+    /// @dev routerfix5 (e): make the snapshot non-vacuous on the actual
+    /// fixture — two keyed grants, one D add and one granted-adder add with
+    /// distinct member/type/weight, a router-executed add_type and both
+    /// weight mutators. All of this is committed STATE that the failure
+    /// comparisons below must preserve byte-for-byte.
+    function _o14Seed(Fixture memory f) internal {
+        _grant(f, address(f.adder), true);
+        _grant(f, actor("o14-g1"), true);
+        vm.prank(address(f.dao));
+        f.r.add_gauge(actor("o14-gauge-a"), int128(1), uint256(101));
+        vm.prank(address(f.adder));
+        f.adder.addViaRouter(actor("o14-gauge-b"), int128(0), uint256(202));
+        (bool e1,) = _callFrom(
+            address(f.dao),
+            address(f.r),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSignature("add_type(string,uint256)", "o14-t", uint256(303))
+            )
+        );
+        require(e1, "seed add_type");
+        (bool e2,) = _callFrom(
+            address(f.dao),
+            address(f.r),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSignature("change_gauge_weight(address,uint256)", actor("o14-gauge-a"), uint256(404))
+            )
+        );
+        require(e2, "seed change_gauge_weight");
+        (bool e3,) = _callFrom(
+            address(f.dao),
+            address(f.r),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSignature("change_type_weight(int128,uint256)", int128(1), uint256(505))
+            )
+        );
+        require(e3, "seed change_type_weight");
+        require(f.c.get_gauge_weight(actor("o14-gauge-a")) == 404 && f.c.type_weight(1) == 505, "seed state live");
+    }
+
+    /// @dev routerfix5 (e): one failure subcase with the COMPLETE rollback
+    /// oracle — full-state equality, an explicit zero log-delta across ALL
+    /// emitters (not a 3-signature filter), and a SUCCESSFUL post-failure
+    /// mutator whose single committed log is compared as a full payload,
+    /// proving both lock reuse after this rejection and a live recorder.
+    function _o14NegFull(Fixture memory fx, bytes memory call, bytes memory wantErr, string memory tag) internal {
+        O14Snap memory pre = _o14Snap(fx);
+        require(!fx.r.isAdder(actor("o14-post")), "post key unused pre-window");
+        rv.recordLogs();
+        (bool ok, bytes memory ret) = _callFrom(address(fx.dao), address(fx.r), call);
+        require(!ok, string.concat(tag, " rejected call accepted"));
+        _revertMatches(ret, wantErr, string.concat(tag, " exact error"));
+        require(rv.getRecordedLogs().length == 0, string.concat(tag, " zero log delta from any emitter"));
+        _assertO14Eq(pre, _o14Snap(fx), string.concat(tag, " full-state equality"));
+        require(rv.load(address(fx.r), bytes32(uint256(2))) == bytes32(uint256(1)), string.concat(tag, " lock idle"));
+        // Actual successful post-failure mutator: the shared lock must be
+        // reusable for a committed state transition, not merely unreadable.
+        rv.recordLogs();
+        _grant(fx, actor("o14-post"), true);
+        require(fx.r.isAdder(actor("o14-post")), string.concat(tag, " post-failure mutator committed"));
+        RV.Log[] memory win = rv.getRecordedLogs();
+        require(win.length == 1, string.concat(tag, " post-failure window exactly one log"));
+        bytes32[] memory aT = new bytes32[](2);
+        aT[0] = keccak256("AdderSet(address,bool)");
+        aT[1] = bytes32(uint256(uint160(actor("o14-post"))));
+        require(
+            _countExactLogUnit(win, address(fx.r), aT, abi.encode(true)) == 1,
+            string.concat(tag, " post-failure AdderSet full payload")
+        );
+    }
+
+    /// @dev routerfix5 (e) / WITNESSES:10 final clause: recorder-captured
+    /// REVERTED trace logs are demonstrated distinct from COMMITTED logs.
+    /// A C hook emits inside the add frame then bubbles an empty revert:
+    /// the recorder still shows those trace entries, yet the full-state
+    /// comparison proves nothing committed (EVM rollback includes logs).
+    /// The enclosing catch (low-level !ok) plus the cleared-hook batch —
+    /// the same add succeeding — form the committed-receipt oracle pair.
+    function _o14LogDiscipline() internal {
+        Fixture memory m = _seatedFixture();
+        _o14Seed(m);
+        O14TraceEmitter em = new O14TraceEmitter();
+        address hooked = actor("o14-hooked");
+        bytes memory addCall =
+            abi.encodeWithSelector(GaugeControllerAdmin.add_gauge.selector, hooked, int128(0), uint256(13));
+        m.c.setHook(address(em), abi.encodeWithSignature("emitThenRevertEmpty()"), false, 1);
+        O14Snap memory mPre = _o14Snap(m);
+        rv.recordLogs();
+        (bool tok, bytes memory tret) = _callFrom(address(m.dao), address(m.r), addCall);
+        require(!tok && tret.length == 0, "trace probe bubbles hook revert");
+        RV.Log[] memory trace = rv.getRecordedLogs();
+        bytes32[] memory nT = new bytes32[](1);
+        nT[0] = keccak256("NewGauge(address,int128,uint256)");
+        require(
+            _countExactLogUnit(trace, address(m.c), nT, abi.encode(hooked, int128(0), uint256(13))) == 1,
+            "trace window shows the rolled-back NewGauge"
+        );
+        bytes32[] memory pT = new bytes32[](1);
+        pT[0] = keccak256("Probe(uint256)");
+        require(
+            _countExactLogUnit(trace, address(em), pT, abi.encode(uint256(7))) == 1, "trace window shows the hook Probe"
+        );
+        bytes32[] memory gT = new bytes32[](3);
+        gT[0] = keccak256("GaugeAdded(address,address,int128,uint256)");
+        gT[1] = bytes32(uint256(uint160(address(m.dao))));
+        gT[2] = bytes32(uint256(uint160(hooked)));
+        require(
+            _countExactLogUnit(trace, address(m.r), gT, abi.encode(int128(0), uint256(13))) == 0,
+            "reverted add never reached the R emit"
+        );
+        // Nothing committed despite trace presence: the receipt oracle is
+        // the enclosing low-level failure + full-state equality.
+        _assertO14Eq(mPre, _o14Snap(m), "reverted trace logs are not committed logs");
+        require(!m.c.registered(hooked), "hooked add rolled back");
+
+        // Batch pair: with the hook cleared, the identical add COMMITS — the
+        // same inner payloads appear while the state actually advances and
+        // no hook trace log exists in the committed window.
+        m.c.setHook(address(0), "", false, 0);
+        rv.recordLogs();
+        (bool ook,) = _callFrom(address(m.dao), address(m.r), addCall);
+        require(ook, "cleared-hook add commits");
+        RV.Log[] memory committed = rv.getRecordedLogs();
+        require(
+            _countExactLogUnit(committed, address(m.c), nT, abi.encode(hooked, int128(0), uint256(13))) == 1,
+            "committed NewGauge full payload"
+        );
+        require(
+            _countExactLogUnit(committed, address(m.r), gT, abi.encode(int128(0), uint256(13))) == 1,
+            "committed GaugeAdded full payload"
+        );
+        require(
+            _countExactLogUnit(committed, address(em), pT, abi.encode(uint256(7))) == 0,
+            "committed window contains no hook trace"
+        );
+        require(m.c.registered(hooked), "committed add advanced state");
+        require(m.c.get_gauge_weight(hooked) == 13, "committed add exact weight");
     }
 
     // ------------------------------------------------------------------
@@ -2009,6 +2292,21 @@ contract ValueLauncher {
     }
 
     receive() external payable {}
+}
+
+/// @dev routerfix5 (e)/O14: emits inside the controller add frame and then
+/// bubbles an empty revert, so the witness can show recorder-captured
+/// REVERTED trace logs (which the harness DOES see) while the enclosing
+/// low-level failure plus full-state equality proves NO committed receipt.
+contract O14TraceEmitter {
+    event Probe(uint256 v);
+
+    function emitThenRevertEmpty() external {
+        emit Probe(7);
+        assembly {
+            revert(0, 0)
+        }
+    }
 }
 
 /// @dev Tiny ERC20 with mint, for unsolicited-transfer witnesses.
