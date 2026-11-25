@@ -1709,6 +1709,14 @@ contract GaugeControllerAdminTest is RouterHarness {
         Fixture memory fa = _seatedFixture();
         vm.prank(address(fa.dao));
         fa.r.commit_transfer_ownership(actor("v-apply-succ"));
+        // CONF-03 residual (review/ROUTERCONF2.md:160-173): fund the ACTUAL
+        // value-debited caller in this fresh fixture. Without funding, the
+        // EVM debits the 1 wei from fa.dao first and the purported callvalue
+        // oracle was satisfied by OutOfFunds before the router frame; with
+        // solvency, the only possible empty-data rejection is native
+        // execution reaching R's own nonpayable arm.
+        rv.deal(address(fa.dao), 2);
+        require(address(fa.dao).balance >= 1, "apply value probe caller is solvent");
         (bool avOk, bytes memory avRet) = _callValueFrom(
             address(fa.dao),
             address(fa.r),

@@ -55,14 +55,27 @@ interface IRouterVoting {
     function vote(uint256, bool, bool) external;
     function executeVote(uint256) external;
     function lastCreateVoteTimes(address) external view returns (uint256);
+    /// @dev CONF-04(b) graph reads (EVMScriptRunner/AppBase public surface
+    /// of the verified deployment, review/routerplan/evidence/agent.sol).
+    function kernel() external view returns (address);
+    function appId() external view returns (bytes32);
+    function getEVMScriptRegistry() external view returns (address);
+    function getEVMScriptExecutor(bytes calldata) external view returns (address);
 }
 
 interface IRouterAgent {
     function kernel() external view returns (address);
+    /// @dev CONF-04(b): AppBase appId() via the Agent proxy (proves the
+    /// delegatecall reaches the registered implementation).
+    function appId() external view returns (bytes32);
 }
 
 interface IRouterKernel {
     function acl() external view returns (address);
+    /// @dev CONF-04(b): the same getApp(bytes32,bytes32) entrypoint the
+    /// AppProxyFallback runtime uses for base resolution (observed
+    /// selector 0xbe00bbd8 in the retained F09 executeVote trace).
+    function getApp(bytes32, bytes32) external view returns (address);
 }
 
 interface IRouterAcl {
@@ -75,10 +88,23 @@ interface IRouterAcl {
         view
         returns (bool);
     function getPermissionParamsLength(address who, address where, bytes32 role) external view returns (uint256);
+    /// @dev CONF-04(b) graph reads: the ACL is itself an AragonApp linked
+    /// into the same kernel (live-verified at the pin).
+    function kernel() external view returns (address);
+    function appId() external view returns (bytes32);
 }
 
 interface IRouterScriptRegistry {
     function getScriptExecutor(bytes calldata script) external view returns (address);
+    /// @dev CONF-04(b) graph reads via the registry proxy.
+    function kernel() external view returns (address);
+    function appId() external view returns (bytes32);
+}
+
+interface IRouterCallsScript {
+    /// @dev CONF-04(b): CallsScript identifies itself as the CALLS_SCRIPT
+    /// executor (review/routerplan/evidence/callsscript.sol:309,394-396).
+    function executorType() external view returns (bytes32);
 }
 
 /// @title ForkGaugeControllerAdminSpec
@@ -135,6 +161,39 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         keccak256("StartVote(uint256,address,string,uint256,uint256,uint256,uint256)");
     bytes32 internal constant T_CAST_VOTE = keccak256("CastVote(uint256,address,bool,uint256)");
     bytes32 internal constant T_EXECUTE_VOTE = keccak256("ExecuteVote(uint256)");
+
+    /// @dev CONF-04(b) governance-graph bindings. Positions and identities
+    /// are the Aragon OS constants of the verified deployment sources
+    /// (review/routerplan/evidence/agent.sol:360-364,1054-1056,1081-1098;
+    /// callsscript.sol:309,394-396). Namespace/position constants are the
+    /// keccak256 of their named strings and re-derived here; the two APM
+    /// app ids are pinned from the evidence and cross-checked against the
+    /// live proxy getters and raw storage slots below (never assumed).
+    bytes32 internal constant KERNEL_APP_BASES_NAMESPACE = keccak256("base");
+    bytes32 internal constant KERNEL_APP_ADDR_NAMESPACE = keccak256("app");
+    bytes32 internal constant APP_STORAGE_KERNEL_POSITION = keccak256("aragonOS.appStorage.kernel");
+    bytes32 internal constant APP_STORAGE_APP_ID_POSITION = keccak256("aragonOS.appStorage.appId");
+    /// @dev Base slot of the KernelProxy runtime at the pin (PUSH32 observed
+    /// in the kernel proxy code; its value is cross-bound to the ACL/kernel
+    /// reads below, and the retained F09 trace shows the same delegatecall
+    /// target actually executing).
+    bytes32 internal constant KERNEL_PROXY_BASE_POSITION =
+        0x8e2ed18767e9c33b25344c240cdf92034fae56be99e2c07f3d9946d949ffede4;
+    bytes32 internal constant EVMSCRIPT_REGISTRY_APP_ID =
+        0xddbcfd564f642ab5627cf68b9b7d374fb4f8a36e941a75d89c87998cef03bd61; // agent.sol:1056
+    bytes32 internal constant KERNEL_DEFAULT_ACL_APP_ID =
+        0xe3262375f45a6e2026b7e7b18c2b807434f2508fe1a2a3dfb493c7df8f4aad6a; // agent.sol:1085
+    bytes32 internal constant CALLS_SCRIPT_EXECUTOR_TYPE = keccak256("CALLS_SCRIPT");
+    /// @dev Complete Agent/C/R event payload topics (CONF-04(b)): Aragon
+    /// Agent Execute + EVMScriptRunner ScriptResult (agent.sol:1123,1487),
+    /// CallsScript LogScriptCall (callsscript.sol:320), the real C's
+    /// ApplyOwnership companion of CommitOwnership, and R's own events.
+    bytes32 internal constant T_AGENT_EXECUTE = keccak256("Execute(address,address,uint256,bytes)");
+    bytes32 internal constant T_SCRIPT_RESULT = keccak256("ScriptResult(address,bytes,bytes,bytes)");
+    bytes32 internal constant T_LOG_SCRIPT_CALL = keccak256("LogScriptCall(address,address,address)");
+    bytes32 internal constant T_C_APPLY_OWNERSHIP = keccak256("ApplyOwnership(address)");
+    bytes32 internal constant T_R_COMMITTED = keccak256("ControllerTransferCommitted(address)");
+    bytes32 internal constant T_R_APPLIED = keccak256("ControllerTransferApplied(address)");
 
     // escrow storage bases (reverse-engineered at the pin via the public
     // getters, verified live inside _fundSimulatedHolder; Vyper 0.2.x maps
@@ -316,10 +375,235 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         }
     }
 
+    /// @dev CONF-04(b): exact recorded-log lookup — emitter, the COMPLETE
+    /// topics array (length and every topic) and the exact data bytes must
+    /// all match. Topic0 counts alone do not establish payload binding.
+    function _countExactLog(RouterForkVm.Log[] memory logs, address emitter, bytes32[] memory topics, bytes memory data)
+        internal
+        pure
+        returns (uint256 hits)
+    {
+        bytes32 wantDataHash = keccak256(data);
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].emitter != emitter) continue;
+            if (logs[i].topics.length != topics.length) continue;
+            bool same = true;
+            for (uint256 j = 0; j < topics.length; ++j) {
+                if (logs[i].topics[j] != topics[j]) {
+                    same = false;
+                    break;
+                }
+            }
+            if (!same) continue;
+            if (keccak256(logs[i].data) != wantDataHash) continue;
+            hits += 1;
+        }
+    }
+
+    function _exactLogOne(
+        RouterForkVm.Log[] memory logs,
+        address emitter,
+        bytes32[] memory topics,
+        bytes memory data,
+        string memory label
+    ) internal pure {
+        require(
+            _countExactLog(logs, emitter, topics, data) == 1, string.concat("FORK_REAL_GOVERNANCE_TRANSPORT ", label)
+        );
+    }
+
     function _callFromAddr(address from, address target, bytes memory data) internal returns (bool, bytes memory) {
         fvm.prank(from);
         (bool ok, bytes memory ret) = target.call(data);
         return (ok, ret);
+    }
+
+    /// @dev CONF-04(b) (review/ROUTERCONF2.md:208-216): the prescribed
+    /// handback/install actions are Agent-wrapped; restate the FULL graph
+    /// bindings for the live F09 transport so passing votes bind real
+    /// Voting/Agent/proxy/Kernel/ACL implementation/runtime graph edges,
+    /// not merely nonzero getters. Every value is read live at the pin.
+    function _f09GovernanceGraphBindings() internal view {
+        address kernel = IRouterAgent(DAO).kernel();
+        require(kernel != address(0), "FORK_REAL_GOVERNANCE_TRANSPORT kernel");
+        require(IRouterVoting(VOTING).kernel() == kernel, "FORK_REAL_GOVERNANCE_TRANSPORT shared kernel");
+        address acl = IRouterKernel(kernel).acl();
+        require(acl != address(0), "FORK_REAL_GOVERNANCE_TRANSPORT acl bound");
+        require(IRouterAcl(acl).kernel() == kernel, "FORK_REAL_GOVERNANCE_TRANSPORT acl reverse link");
+        // raw appStorage slots must agree with what the proxies report
+        require(
+            rvf.load(DAO, APP_STORAGE_KERNEL_POSITION) == bytes32(uint256(uint160(kernel))),
+            "FORK_REAL_GOVERNANCE_TRANSPORT agent appStorage.kernel slot"
+        );
+        require(
+            rvf.load(VOTING, APP_STORAGE_KERNEL_POSITION) == bytes32(uint256(uint160(kernel))),
+            "FORK_REAL_GOVERNANCE_TRANSPORT voting appStorage.kernel slot"
+        );
+        require(
+            rvf.load(acl, APP_STORAGE_KERNEL_POSITION) == bytes32(uint256(uint160(kernel))),
+            "FORK_REAL_GOVERNANCE_TRANSPORT acl appStorage.kernel slot"
+        );
+        require(
+            rvf.load(SCRIPT_REGISTRY, APP_STORAGE_KERNEL_POSITION) == bytes32(uint256(uint160(kernel))),
+            "FORK_REAL_GOVERNANCE_TRANSPORT registry appStorage.kernel slot"
+        );
+        bytes32 agentAppId = IRouterAgent(DAO).appId();
+        bytes32 votingAppId = IRouterVoting(VOTING).appId();
+        require(agentAppId != bytes32(0) && votingAppId != bytes32(0), "FORK_REAL_GOVERNANCE_TRANSPORT appIds set");
+        require(
+            rvf.load(DAO, APP_STORAGE_APP_ID_POSITION) == agentAppId
+                && rvf.load(VOTING, APP_STORAGE_APP_ID_POSITION) == votingAppId
+                && rvf.load(acl, APP_STORAGE_APP_ID_POSITION) == KERNEL_DEFAULT_ACL_APP_ID,
+            "FORK_REAL_GOVERNANCE_TRANSPORT appStorage.appId slots bound"
+        );
+        require(
+            IRouterAcl(acl).appId() == KERNEL_DEFAULT_ACL_APP_ID
+                && IRouterScriptRegistry(SCRIPT_REGISTRY).appId() == EVMSCRIPT_REGISTRY_APP_ID,
+            "FORK_REAL_GOVERNANCE_TRANSPORT acl/registry appIds pinned"
+        );
+        // implementation bindings: the same kernel.getApp(bases-ns, appId)
+        // path the proxy runtimes use for base resolution (observed
+        // selector 0xbe00bbd8), each resolving to distinct deployed code
+        address implAgent = IRouterKernel(kernel).getApp(KERNEL_APP_BASES_NAMESPACE, agentAppId);
+        address implVoting = IRouterKernel(kernel).getApp(KERNEL_APP_BASES_NAMESPACE, votingAppId);
+        address implAcl = IRouterKernel(kernel).getApp(KERNEL_APP_BASES_NAMESPACE, KERNEL_DEFAULT_ACL_APP_ID);
+        address implRegistry = IRouterKernel(kernel).getApp(KERNEL_APP_BASES_NAMESPACE, EVMSCRIPT_REGISTRY_APP_ID);
+        require(implAgent != DAO && implVoting != VOTING, "FORK_REAL_GOVERNANCE_TRANSPORT impl distinct from proxy");
+        require(
+            implAgent.code.length > 0 && implVoting.code.length > 0 && implAcl.code.length > 0
+                && implRegistry.code.length > 0,
+            "FORK_REAL_GOVERNANCE_TRANSPORT impl runtimes present"
+        );
+        address implKernel = address(uint160(uint256(rvf.load(kernel, KERNEL_PROXY_BASE_POSITION))));
+        require(implKernel != kernel && implKernel.code.length > 0, "FORK_REAL_GOVERNANCE_TRANSPORT kernel base");
+        // actual graph-to-registry relation: the runner path the executed
+        // votes traverse, plus the registry app-instance binding
+        require(
+            IRouterVoting(VOTING).getEVMScriptRegistry() == SCRIPT_REGISTRY
+                && IRouterKernel(kernel).getApp(KERNEL_APP_ADDR_NAMESPACE, EVMSCRIPT_REGISTRY_APP_ID)
+                    == SCRIPT_REGISTRY,
+            "FORK_REAL_GOVERNANCE_TRANSPORT registry bound through kernel"
+        );
+        require(
+            IRouterCallsScript(CALLS_EXECUTOR).executorType() == CALLS_SCRIPT_EXECUTOR_TYPE,
+            "FORK_REAL_GOVERNANCE_TRANSPORT executor type"
+        );
+    }
+
+    /// @dev CONF-04(b): the Agent emitted Execute(sender=Voting, target, 0,
+    /// innerCalldata) with the EXACT inner payload for this prescribed
+    /// action (agent.sol:1487,1508; ground truth in the retained F09 trace).
+    function _requireAgentExecuted(RouterForkVm.Log[] memory logs, Action memory action, string memory label)
+        internal
+        view
+    {
+        require(action.target == DAO && action.data.length > 4, "FORK_REAL_GOVERNANCE_TRANSPORT agent action shape");
+        bytes memory d = action.data;
+        bytes memory tail = new bytes(d.length - 4);
+        for (uint256 j = 0; j < tail.length; ++j) {
+            tail[j] = d[j + 4];
+        }
+        (address innerTarget, uint256 innerValue, bytes memory innerData) = abi.decode(tail, (address, uint256, bytes));
+        require(innerValue == 0, "FORK_REAL_GOVERNANCE_TRANSPORT explicit zero ETH value");
+        bytes32[] memory topics = new bytes32[](3);
+        topics[0] = T_AGENT_EXECUTE;
+        topics[1] = bytes32(uint256(uint160(VOTING)));
+        topics[2] = bytes32(uint256(uint160(innerTarget)));
+        // the deployed 0.4.24 Agent writes the trailing bytes field WITHOUT
+        // word padding (getRecordedLogs ground truth: 96-byte heads
+        // [ethValue=0][offset=0x40] + [len][raw bytes]); match exactly.
+        bytes memory wantData =
+            abi.encodePacked(bytes32(0), bytes32(uint256(0x40)), bytes32(uint256(innerData.length)), innerData);
+        _exactLogOne(logs, DAO, topics, wantData, label);
+    }
+
+    /// @dev CONF-04(b): EVMScriptRunner ScriptResult(executor, script,
+    /// input, returnData) on VOTING with the complete executed script bytes
+    /// (agent.sol:1123,1197; Voting passes empty input and the CALLS
+    /// executor returns empty output at this pin).
+    function _requireScriptResult(RouterForkVm.Log[] memory logs, bytes memory script, string memory label)
+        internal
+        view
+    {
+        bytes32[] memory topics = new bytes32[](2);
+        topics[0] = T_SCRIPT_RESULT;
+        topics[1] = bytes32(uint256(uint160(CALLS_EXECUTOR)));
+        _exactLogOne(logs, VOTING, topics, abi.encode(script, new bytes(0), new bytes(0)), label);
+    }
+
+    /// @dev CONF-04(b): one CallsScript LogScriptCall(sender=test caller,
+    /// src=Voting, dst=DAO) per executed action (callsscript.sol:320,344).
+    function _requireScriptCalls(RouterForkVm.Log[] memory logs, uint256 actions, string memory label) internal view {
+        bytes32[] memory topics = new bytes32[](4);
+        topics[0] = T_LOG_SCRIPT_CALL;
+        topics[1] = bytes32(uint256(uint160(address(this))));
+        topics[2] = bytes32(uint256(uint160(VOTING)));
+        topics[3] = bytes32(uint256(uint160(DAO)));
+        require(
+            _countExactLog(logs, VOTING, topics, "") == actions, string.concat("FORK_REAL_GOVERNANCE_TRANSPORT ", label)
+        );
+    }
+
+    /// @dev CONF-04(b): complete Agent/C/R event payload checks for the
+    /// install ballot — every prescribed action observed as Agent.Execute
+    /// with its exact inner calldata, the ScriptResult bound to the actual
+    /// script bytes, one LogScriptCall per action, and the real-C commit/
+    /// apply plus R grant events carrying their exact successor/adder
+    /// payloads (replaces the former topic0 counts).
+    function _f09InstallEventBindings(
+        RouterForkVm.Log[] memory logs,
+        address r,
+        address l,
+        Action[] memory actions,
+        bytes memory script
+    ) internal view {
+        require(actions.length == 3, "FORK_REAL_GOVERNANCE_TRANSPORT install shape");
+        _requireAgentExecuted(logs, actions[0], "install commit(C) Agent.Execute payload");
+        _requireAgentExecuted(logs, actions[1], "install apply(C) Agent.Execute payload");
+        _requireAgentExecuted(logs, actions[2], "install grant(L) Agent.Execute payload");
+        _requireScriptResult(logs, script, "install ScriptResult payload");
+        _requireScriptCalls(logs, actions.length, "install LogScriptCall per action");
+        bytes32[] memory t1 = new bytes32[](1);
+        t1[0] = T_COMMIT_OWNERSHIP;
+        _exactLogOne(logs, CONTROLLER, t1, abi.encode(r), "install CommitOwnership(r) payload");
+        t1[0] = T_C_APPLY_OWNERSHIP;
+        _exactLogOne(logs, CONTROLLER, t1, abi.encode(r), "install ApplyOwnership(r) payload");
+        bytes32[] memory t2 = new bytes32[](2);
+        t2[0] = T_ADDER_SET;
+        t2[1] = bytes32(uint256(uint160(l)));
+        _exactLogOne(logs, r, t2, abi.encode(true), "install AdderSet(l,true) payload");
+    }
+
+    /// @dev CONF-04(b): the handback ballot's complete Agent/C/R payloads —
+    /// revoke and ownership events with exact successor/adder bytes plus the
+    /// per-action Agent.Execute and ScriptResult/LogScriptCall observations.
+    function _f09HandbackEventBindings(
+        RouterForkVm.Log[] memory logs,
+        address r,
+        address l,
+        Action[] memory actions,
+        bytes memory script
+    ) internal view {
+        require(actions.length == 3, "FORK_REAL_GOVERNANCE_TRANSPORT handback shape");
+        _requireAgentExecuted(logs, actions[0], "handback grant(L,false) Agent.Execute payload");
+        _requireAgentExecuted(logs, actions[1], "handback commit(D) Agent.Execute payload");
+        _requireAgentExecuted(logs, actions[2], "handback apply(R) Agent.Execute payload");
+        _requireScriptResult(logs, script, "handback ScriptResult payload");
+        _requireScriptCalls(logs, actions.length, "handback LogScriptCall per action");
+        bytes32[] memory t1 = new bytes32[](1);
+        t1[0] = T_COMMIT_OWNERSHIP;
+        _exactLogOne(logs, CONTROLLER, t1, abi.encode(DAO), "handback CommitOwnership(D) payload");
+        t1[0] = T_C_APPLY_OWNERSHIP;
+        _exactLogOne(logs, CONTROLLER, t1, abi.encode(DAO), "handback ApplyOwnership(D) payload");
+        bytes32[] memory t2 = new bytes32[](2);
+        t2[0] = T_ADDER_SET;
+        t2[1] = bytes32(uint256(uint160(l)));
+        _exactLogOne(logs, r, t2, abi.encode(false), "handback AdderSet(l,false) payload");
+        t2[0] = T_R_COMMITTED;
+        t2[1] = bytes32(uint256(uint160(DAO)));
+        _exactLogOne(logs, r, t2, "", "handback ControllerTransferCommitted(D) payload");
+        t2[0] = T_R_APPLIED;
+        _exactLogOne(logs, r, t2, "", "handback ControllerTransferApplied(D) payload");
     }
 
     function _routerErr(bytes4 sel, bytes memory args) internal pure returns (bytes memory) {
@@ -1246,6 +1530,10 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
                 == CALLS_EXECUTOR,
             "FORK_REAL_GOVERNANCE_TRANSPORT executor bound"
         );
+        // CONF-04(b) (review/ROUTERCONF2.md:208-216): full Voting/Agent/
+        // proxy/Kernel/ACL implementation+runtime graph and the actual
+        // graph-to-registry relation, all read live at the pin.
+        _f09GovernanceGraphBindings();
 
         RouterTrio memory t = _deployRouterTrio(10_000);
         GaugeControllerAdmin r = t.router;
@@ -1266,8 +1554,16 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         );
         _bindExpectedCalls(install);
         (, RouterForkVm.Log[] memory installLogs) = _runGovernanceVote(install, "router-exec install", 2);
-        require(_logCount(installLogs, CONTROLLER, T_COMMIT_OWNERSHIP) == 1, "install CommitOwnership frame observed");
-        require(_logCount(installLogs, address(r), T_ADDER_SET) == 1, "install AdderSet frame observed");
+        // CONF-04(b) (review/ROUTERCONF2.md:213-216): complete Agent/C/R
+        // event payload checks, not topic0 counts; plus the actual executed
+        // install script bytes bound to their registry-resolved executor.
+        bytes memory installScript = _callsScript(install);
+        require(
+            IRouterVoting(VOTING).getEVMScriptExecutor(installScript) == CALLS_EXECUTOR
+                && IRouterScriptRegistry(SCRIPT_REGISTRY).getScriptExecutor(installScript) == CALLS_EXECUTOR,
+            "FORK_REAL_GOVERNANCE_TRANSPORT install script executor bound"
+        );
+        _f09InstallEventBindings(installLogs, address(r), address(t.lister), install, installScript);
 
         assertEq(_c().admin(), address(r), "FORK_REAL_GOVERNANCE_TRANSPORT seated by genuine vote");
         assertEq(_c().future_admin(), address(r), "future R kept (stale, real behaviour)");
@@ -1301,16 +1597,16 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         );
         _bindExpectedCalls(handback);
         (, RouterForkVm.Log[] memory hbLogs) = _runGovernanceVote(handback, "router-exec handback", 2);
-        require(_logCount(hbLogs, address(r), T_ADDER_SET) == 1, "handback AdderSet(revoke) frame observed");
+        // CONF-04(b) (review/ROUTERCONF2.md:213-216): complete Agent/C/R
+        // event payloads for the handback ballot, not topic0 counts; the
+        // actual executed handback script bytes bind to the same executor.
+        bytes memory handbackScript = _callsScript(handback);
         require(
-            _logCount(hbLogs, address(r), keccak256("ControllerTransferCommitted(address)")) == 1,
-            "handback Committed frame observed"
+            IRouterVoting(VOTING).getEVMScriptExecutor(handbackScript) == CALLS_EXECUTOR
+                && IRouterScriptRegistry(SCRIPT_REGISTRY).getScriptExecutor(handbackScript) == CALLS_EXECUTOR,
+            "FORK_REAL_GOVERNANCE_TRANSPORT handback script executor bound"
         );
-        require(
-            _logCount(hbLogs, address(r), keccak256("ControllerTransferApplied(address)")) == 1,
-            "handback Applied frame observed"
-        );
-        require(_logCount(hbLogs, CONTROLLER, T_COMMIT_OWNERSHIP) == 1, "handback CommitOwnership frame observed");
+        _f09HandbackEventBindings(hbLogs, address(r), address(t.lister), handback, handbackScript);
 
         assertEq(_c().admin(), DAO, "FORK_REAL_GOVERNANCE_TRANSPORT handback restored D by genuine vote");
         assertTrue(r.retired(), "FORK_REAL_GOVERNANCE_TRANSPORT router retired");
@@ -1663,10 +1959,51 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
             _callFromAddr(DAO, address(r), abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, rando(), true));
         require(!inert, "FORK_PARIS_LIFECYCLE retired R mutating");
         _assertI128Eq(r.n_gauge_types(), _c().n_gauge_types(), "FORK_PARIS_LIFECYCLE retired reads survive");
+        // CONF-01 residual (review/ROUTERCONF2.md:90-98): the expressly
+        // required selected-byte repetition — the restored direct D lane is
+        // exercised with raw add_type, change_type_weight and
+        // change_gauge_weight INSIDE this selected Paris rehearsal with
+        // exact readbacks (F07's Cancun-analog lane cannot supply it,
+        // review/ROUTERCONF2.md:93-94). The commit(C) lane this handback
+        // drives through the selected instance uses the review's required
+        // RAW values (review/ROUTERCONF2.md:194,196): target
+        // 270125199945504599111523101509100263416079599291 == uint160(C)
+        // (whose 20-byte literal is bound into the selected runtime by
+        // _installParisArtifact) and selector 1799625280 == uint32
+        // commit_transfer_ownership(address), unshifted.
+        require(
+            uint256(uint32(IControllerVenue.commit_transfer_ownership.selector)) == 1799625280
+                && uint256(uint32(GaugeControllerAdmin.commit_transfer_ownership.selector)) == 1799625280,
+            "FORK_PARIS_LIFECYCLE review/ROUTERCONF2:196 required selector"
+        );
         address postHandback = _synthGauge("f11 post handback direct");
         fvm.prank(DAO);
         _c().add_gauge(postHandback, int128(0), uint256(5));
         assertEq(_c().get_gauge_weight(postHandback), 5, "FORK_PARIS_LIFECYCLE direct D restored");
+
+        int128 selectedTypesBefore = _c().n_gauge_types();
+        fvm.prank(DAO);
+        (bool selAtOk,) = CONTROLLER.call(abi.encodeWithSignature("add_type(string)", "f11-selected-restored-type"));
+        require(selAtOk, "FORK_PARIS_LIFECYCLE post-handback raw add_type");
+        _assertI128Eq(
+            _c().n_gauge_types(), selectedTypesBefore + 1, "post-handback add_type advanced the canonical bound"
+        );
+
+        fvm.prank(DAO);
+        (bool selTwOk,) = CONTROLLER.call(
+            abi.encodeWithSignature("change_type_weight(int128,uint256)", selectedTypesBefore, uint256(4242))
+        );
+        require(selTwOk, "FORK_PARIS_LIFECYCLE post-handback raw change_type_weight");
+        assertEq(r_type_weight(selectedTypesBefore), 4242, "post-handback type weight readback exact");
+
+        fvm.prank(DAO);
+        _c().change_gauge_weight(postHandback, uint256(77));
+        assertEq(_c().get_gauge_weight(postHandback), 77, "FORK_PARIS_LIFECYCLE post-handback raw change_gauge_weight");
+
+        // the selected Paris runtime continues to serve the read-through
+        // against the freshly mutated state
+        _assertI128Eq(r.n_gauge_types(), selectedTypesBefore + 1, "selected Paris runtime reads added type");
+        _assertI128Eq(r.gauge_types(postHandback), int128(0), "selected Paris runtime reads membership");
     }
 
     /// @dev Deploy the exact selected Paris artifact at the pin and bind it
@@ -1709,6 +2046,12 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         require(GaugeControllerAdmin(parisR).controller() == CONTROLLER, "FORK_PARIS_LIFECYCLE immutable C getter");
         require(GaugeControllerAdmin(parisR).dao() == DAO, "FORK_PARIS_LIFECYCLE immutable D getter");
         require(_containsBytes(parisR.code, bytes20(CONTROLLER)), "FORK_PARIS_LIFECYCLE C literal embedded");
+        // the literal the byte scan above matched IS the review's required
+        // unshifted commit(C) target (review/ROUTERCONF2.md:194)
+        require(
+            uint256(uint160(CONTROLLER)) == 270125199945504599111523101509100263416079599291,
+            "FORK_PARIS_LIFECYCLE review/ROUTERCONF2:194 required target"
+        );
         require(_containsBytes(parisR.code, bytes20(DAO)), "FORK_PARIS_LIFECYCLE D literal embedded");
         require(!(_containsBytes(expectedRuntime, bytes20(CONTROLLER))), "artifact keeps immutable placeholders");
         return GaugeControllerAdmin(parisR);
