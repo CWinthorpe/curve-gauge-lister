@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "authority_id": "routergate",
+  "candidate": "72f775e91c0a090364f00ceafe9b55d8bb862922",
+  "checked_at_utc": "2026-11-26T08:51:17.511660+00:00",
+  "binding_sha256": "f50548f8ae091c13c0332fbd8e3fd87a771b6708d23194e47344e2642b4d601d",
+  "candidate_tracked_files": 65,
+  "fleet_snapshot_product_files": 60,
+  "dispositions": 17,
+  "registered_re_derivations": 6,
+  "final_two_blind_rounds": [
+    "cgl-sec-r3",
+    "cgl-router-fleet-r1"
+  ],
+  "final_two_critical_high": 0,
+  "historical_round_one_conditional_high": 1,
+  "router_blind_round_count": 1,
+  "historical_default_pass_set": 103,
+  "historical_fork_pass_set": 25,
+  "historical_full_runs_reconciled": 4,
+  "conformance_receipt_files_verified": 27,
+  "conformance_authority_inputs_verified": 6,
+  "product_bytes_unchanged": true,
+  "carrier_prefix_preserved": true,
+  "fd_ctl_carriers_unchanged": true,
+  "publication_scope_valid": true,
+  "new_product_executions": 0,
+  "new_chain_queries_or_transactions": 0,
+  "campaign_audit_obligations_complete": true,
+  "activation": "HOLD / ACTIVATION-OPEN"
+}
