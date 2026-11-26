@@ -339,8 +339,19 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         return address(uint160(uint256(keccak256(bytes(label)))));
     }
 
+    /// @dev routerfix6 (g) / review/ROUTERCONF4.md:286-288: the raw
+    /// membership probe — call STATUS plus the complete return/revert BYTES,
+    /// never discarded. The pinned Vyper controller's gauge_types reverts
+    /// with EMPTY data for an absent gauge (independently verified by raw
+    /// eth_call at header 26401019: execution reverted, data 0x) and returns
+    /// exactly one int128 word when present — so status+raw-data together
+    /// distinguish absent from present from malformed, per WITNESSES:10.
+    function _isRegisteredRaw(address g) internal view returns (bool ok, bytes memory data) {
+        (ok, data) = CONTROLLER.staticcall(abi.encodeWithSelector(_c().gauge_types.selector, g));
+    }
+
     function _isRegistered(address g) internal view returns (bool) {
-        (bool ok,) = CONTROLLER.staticcall(abi.encodeWithSelector(_c().gauge_types.selector, g));
+        (bool ok,) = _isRegisteredRaw(g);
         return ok;
     }
 
@@ -1304,21 +1315,50 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
     /// F05 snapshot.
     struct F05Member {
         bool registered;
+        // routerfix6 (g): raw membership observation — status AND the exact
+        // return/revert bytes, compared across snapshots, not discarded.
+        bool regOk;
+        bytes regData;
         int128 gtype;
         uint256 weight;
         bytes32 listingHash;
         uint256 typeWeight;
+        // routerfix6 (g): true once the relevant type weight was READ (for a
+        // registered member its own type; for an absent candidate the
+        // Candidate's known scan gaugeType — never skipped).
+        bool typeWeightObserved;
     }
 
-    function _f05Member(CurveGaugeLister l, address gauge) internal view returns (F05Member memory fm) {
+    function _f05Member(CurveGaugeLister l, address gauge, int128 knownType, bool hasKnownType)
+        internal
+        view
+        returns (F05Member memory fm)
+    {
         fm.listingHash = keccak256(abi.encode(l.getListing(gauge)));
-        fm.registered = _isRegistered(gauge);
-        if (fm.registered) {
+        (fm.regOk, fm.regData) = _isRegisteredRaw(gauge);
+        fm.registered = fm.regOk;
+        // pin the observed raw shapes: present = one 32-byte int128 word,
+        // absent = bare Vyper revert with ZERO bytes (verified against the
+        // live pinned header). Any other length is a new state, not a
+        // silently re-collapsed one.
+        require(fm.regOk ? fm.regData.length == 32 : fm.regData.length == 0, "F05 member raw gauge_types shape");
+        if (fm.regOk) {
             fm.gtype = _c().gauge_types(gauge);
             fm.weight = _c().get_gauge_weight(gauge);
             fm.typeWeight = r_type_weight(fm.gtype);
+            fm.typeWeightObserved = true;
         } else {
             fm.gtype = int128(999); // absence sentinel, never a fabricated 0
+            // routerfix6 (g) / review/ROUTERCONF4.md:288-291: the candidate's
+            // gaugeType is KNOWN from the registry scan (Candidate struct,
+            // :350-355), so its relevant type weight is a readable state
+            // observation even while the gauge itself is unregistered — the
+            // pre-grant no-member fixture now has candidate type-weight
+            // observations instead of skipping them.
+            if (hasKnownType) {
+                fm.typeWeight = r_type_weight(knownType);
+                fm.typeWeightObserved = true;
+            }
         }
     }
 
@@ -1346,6 +1386,17 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         uint256 allowListerVa;
         uint256 allowListerVma;
         bytes32 vmReceiptsDigest;
+        // routerfix6 (g) / review/ROUTERCONF4.md:271-278: the REAL upstream
+        // approval edges and venue custody — the bounded adapter->Votium
+        // approval (contracts/adapters/VotiumAdapter.sol:154-162) and the
+        // bounded adapter->CampaignRemoteManager approval
+        // (contracts/adapters/VoteMarketAdapter.sol:211-221), plus the
+        // actual upstream VOTIUM and CRM token balances (the former pair at
+        // F:1410-1411 was adapter CUSTODY only).
+        uint256 allowVaVotium;
+        uint256 allowVmaCrm;
+        uint256 votiumVenueBal;
+        uint256 crmVenueBal;
         bool adderLister;
         address pendingR;
         bool retiredR;
@@ -1367,27 +1418,60 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
     }
 
     /// @dev keyed half of the VoteMarket adapter receipt ledger.
+    /// routerfix6 (g) / review/ROUTERCONF4.md:279-280: the ledger now spans
+    /// the COMPLETE scheduled-quarter horizon — the lister law
+    /// (contracts/CurveGaugeLister.sol:530-543) schedules four quarters at
+    /// listingEpoch + n*WEEK, n = 1..4, and listingEpoch ==
+    /// epochStart(now) == floorWeek(now) — for the candidate AND the
+    /// retained member. The former single-key (n = 1) probe left the other
+    /// three scheduled keys unobserved. Keys n = 0..4 are read so the
+    /// listing epoch's deposit-map key is witnessed too: complete
+    /// (amount, executionEpoch, receipt) triples, never counts alone.
     function _f05VmaKeyed(RouterTrio memory t, Candidate memory cdA, Candidate memory cdB, address firstGauge)
         internal
         view
         returns (bytes memory)
     {
         uint256 eq0 = (block.timestamp / 604800) * 604800;
-        (uint256 d0a, uint256 d0x, bytes32 d0r) = t.vma.getDeposit(cdA.gauge, eq0 + 604800);
-        (uint256 d1a, uint256 d1x, bytes32 d1r) = t.vma.getDeposit(cdB.gauge, eq0 + 604800);
-        (uint256 d2a, uint256 d2x, bytes32 d2r) = t.vma.getDeposit(firstGauge, eq0 + 604800);
-        return abi.encodePacked(d0a, d0x, d0r, d1a, d1x, d1r, d2a, d2x, d2r);
+        address[3] memory gs = [cdA.gauge, cdB.gauge, firstGauge];
+        bytes memory lad;
+        for (uint256 gi = 0; gi < 3; ++gi) {
+            if (gs[gi] == address(0)) continue;
+            for (uint256 ei = 0; ei < 5; ++ei) {
+                (uint256 a, uint256 x, bytes32 rc) = t.vma.getDeposit(gs[gi], eq0 + ei * 604800);
+                lad = abi.encodePacked(lad, a, x, rc);
+            }
+        }
+        return lad;
     }
 
     /// @dev chronological half: the ordered depositAt prefix (padded to a
     /// fixed three-slot ledger so the digest is comparable across snapshots).
+    /// routerfix6 (g) / review/ROUTERCONF4.md:280-284: the former bare
+    /// `catch` collapsed EVERY revert to one zero word, discarding the raw
+    /// failure data. Each slot now carries its call status and, on failure,
+    /// the complete revert bytes: an absent entry on the adapter's dynamic
+    /// _depositLog reverts with the canonical range-check Panic payload —
+    /// pinned literally here and compared across snapshots, so absent
+    /// entries are OBSERVED raw failures, never collapsed zeros.
     function _f05VmaChronological(RouterTrio memory t) internal view returns (bytes memory) {
+        // every F05 negative snapshot sits BEFORE any settlement: the real
+        // adapter has zero committed deposit records, so all three ordered
+        // slots must hit the observed-absence arm (each one carrying the
+        // adapter's own Panic(0x32) range revert below).
+        require(t.vma.depositCount() == 0, "F05 chronological window has no committed records");
         bytes memory lad;
         for (uint256 i = 0; i < 3; ++i) {
             try t.vma.depositAt(i) returns (VoteMarketAdapter.DepositRecord memory rec) {
-                lad = abi.encodePacked(lad, rec.gauge, rec.scheduledEpoch, rec.amount, rec.executionEpoch, rec.receipt);
-            } catch {
-                lad = abi.encodePacked(lad, bytes32(0));
+                lad = abi.encodePacked(
+                    lad, true, rec.gauge, rec.scheduledEpoch, rec.amount, rec.executionEpoch, rec.receipt
+                );
+            } catch (bytes memory rdata) {
+                require(
+                    keccak256(rdata) == keccak256(abi.encodeWithSignature("Panic(uint256)", uint256(0x32))),
+                    "F05 chronological absent-entry raw data"
+                );
+                lad = abi.encodePacked(lad, false, uint256(rdata.length), rdata);
             }
         }
         return lad;
@@ -1412,14 +1496,33 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         s.vDepositsVm = t.vma.depositCount();
         s.allowListerVa = IErc20Venue(CRVUSD).allowance(address(t.lister), address(t.va));
         s.allowListerVma = IErc20Venue(CRVUSD).allowance(address(t.lister), address(t.vma));
+        // routerfix6 (g) / review/ROUTERCONF4.md:271-278: the upstream
+        // approval edges the deposit law force-approves-then-clears
+        // (adapter->VOTIUM, VotiumAdapter.sol:154-162; adapter->CRM,
+        // VoteMarketAdapter.sol:211-221) and the REAL venue token balances.
+        // The adapter-side immutables are read back and pinned to the
+        // reviewed constants first, so these edges bind to the actual
+        // 10000-bps fixture venues, not to a lookalike address.
+        require(t.va.votium() == VOTIUM && t.vma.campaignRemoteManager() == CRM, "F05 venue edge identity pinned");
+        s.allowVaVotium = IErc20Venue(CRVUSD).allowance(address(t.va), VOTIUM);
+        s.allowVmaCrm = IErc20Venue(CRVUSD).allowance(address(t.vma), CRM);
+        s.votiumVenueBal = IErc20Venue(CRVUSD).balanceOf(VOTIUM);
+        s.crmVenueBal = IErc20Venue(CRVUSD).balanceOf(CRM);
         s.vmReceiptsDigest = _f05VmLadder(t, cdA, cdB, firstGauge);
         s.adderLister = t.router.isAdder(address(t.lister));
         s.pendingR = t.router.pendingControllerAdmin();
         s.retiredR = t.router.retired();
         s.lockWord = rvf.load(address(t.router), bytes32(uint256(2)));
-        s.first = _f05Member(t.lister, firstGauge);
-        s.a = _f05Member(t.lister, cdA.gauge);
-        s.b = _f05Member(t.lister, cdB.gauge);
+        // routerfix6 (g): members carry their scan-known gaugeType so an
+        // absent member's relevant type weight is OBSERVED (reviewer: "the
+        // candidate's known gaugeType is available in Candidate (:350-355),
+        // but its relevant type weight is only collected for already-
+        // registered members"). The revoked fixture's retained first member
+        // is the provenance-mirrored legacy pair (LEGACY_GAUGE_TYPE); the
+        // pre-grant fixture has no member, only the address(0) placeholder.
+        s.first = _f05Member(t.lister, firstGauge, LEGACY_GAUGE_TYPE, firstGauge != address(0));
+        s.a = _f05Member(t.lister, cdA.gauge, cdA.gaugeType, true);
+        s.b = _f05Member(t.lister, cdB.gauge, cdB.gaugeType, true);
         return s;
     }
 

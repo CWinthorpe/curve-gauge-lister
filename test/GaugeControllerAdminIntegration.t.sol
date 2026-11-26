@@ -154,8 +154,8 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         uint256 allowListerVoteMarket;
         // routerfix5 (f) per plans/ROUTERPLAN-WITNESSES.md:10: router
         // grants/pending/retired lifecycle, adapter keyed AND chronological
-        // receipts (ordered ladder digest over both venues x both gauges x
-        // three scheduled quarters) and the remaining platform approvals.
+        // receipts and the remaining platform approvals. (routerfix6 (f)
+        // completes the receipt scope: see the block below.)
         bool adderLister;
         bool adderStranger;
         address pendingR;
@@ -164,9 +164,34 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         bytes32 adapterReceiptsDigest;
         uint256 allowPayerVotium;
         uint256 allowPayerVoteMarket;
+        // routerfix6 (f) / review/ROUTERCONF4.md:231-246: (1) the raw
+        // scheduled-quarter ladder now covers ALL FOUR scheduled keys
+        // E+WEEK..E+4*WEEK per lister law (contracts/CurveGaugeLister.sol:
+        // 530-543) plus the listing epoch itself, over both venues and EVERY
+        // scoped gauge including the retained member (former digest omitted
+        // the third/fourth keys and the retained gaugeC); (2) chronological
+        // adapter-record reads are honest ABSENCES: the frozen
+        // MockIncentivePlatform exposes only getDeposit/depositCount
+        // (contracts/mocks/MockIncentivePlatform.sol:149-162), so the raw
+        // missing-getter result (status + return/revert bytes) is captured
+        // and compared per WITNESSES:10; (3) the gauge_types skip for
+        // unregistered members (the former I:187-190 conditional) is now a
+        // captured raw-failure observation per member.
+        bytes adapterReceiptsRaw;
+        bool chronVotiumOk;
+        bytes chronVotiumRaw;
+        bool chronVoteMarketOk;
+        bytes chronVoteMarketRaw;
+        bool typeOkA;
+        bytes typeRawA;
+        bool typeOkB;
+        bytes typeRawB;
     }
 
-    function _world(address gaugeA, address gaugeB) internal view returns (World memory w) {
+    /// @dev routerfix6 (f): third scope slot — the RETAINED member whose
+    /// receipts must ride in the whole-snapshot comparison (the revoked
+    /// fixture previously digested only the two rejected candidates).
+    function _world(address gaugeA, address gaugeB, address gaugeRetained) internal view returns (World memory w) {
         w.payerBal = token.balanceOf(payer);
         w.payerAllow = token.allowance(payer, address(lister));
         w.listerBal = token.balanceOf(address(lister));
@@ -186,8 +211,16 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         w.weightB = c.get_gauge_weight(gaugeB);
         w.regA = c.registered(gaugeA);
         w.regB = c.registered(gaugeB);
-        if (w.regA) w.typeA = c.gauge_types(gaugeA);
-        if (w.regB) w.typeB = c.gauge_types(gaugeB);
+        // routerfix6 (f) / review/ROUTERCONF4.md:243-246: the former
+        // `if (w.regX) w.typeX = c.gauge_types(...)` skip is gone. The raw
+        // gauge_types result is captured for EVERY scoped member — status
+        // plus return/revert bytes — so an absent member yields an observed
+        // raw failure (RouterControllerMock reverts MockAbsent(); a malformed
+        // upstream return is likewise visible as raw, never silently skipped).
+        (w.typeOkA, w.typeRawA) = address(c).staticcall(abi.encodeWithSignature("gauge_types(address)", gaugeA));
+        (w.typeOkB, w.typeRawB) = address(c).staticcall(abi.encodeWithSignature("gauge_types(address)", gaugeB));
+        if (w.typeOkA && w.typeRawA.length == 32) w.typeA = abi.decode(w.typeRawA, (int128));
+        if (w.typeOkB && w.typeRawB.length == 32) w.typeB = abi.decode(w.typeRawB, (int128));
         w.allowListerVotium = token.allowance(address(lister), address(votium));
         w.allowListerVoteMarket = token.allowance(address(lister), address(voteMarket));
         // routerfix5 (f): full snapshot completion.
@@ -196,19 +229,58 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         w.pendingR = r.pendingControllerAdmin();
         w.retiredR = r.retired();
         w.lockWord = rv.load(address(r), bytes32(uint256(2)));
-        uint256 eq0 = (block.timestamp / WEEK) * WEEK;
-        address[2] memory ladderGauges = [gaugeA, gaugeB];
-        bytes memory ladder;
-        for (uint256 gi = 0; gi < 2; ++gi) {
-            for (uint256 ei = 0; ei < 3; ++ei) {
-                (uint256 va, uint256 vex, bytes32 vrc) = votium.getDeposit(ladderGauges[gi], eq0 + ei * WEEK);
-                (uint256 ma, uint256 mex, bytes32 mrc) = voteMarket.getDeposit(ladderGauges[gi], eq0 + ei * WEEK);
-                ladder = abi.encodePacked(ladder, va, vex, vrc, ma, mex, mrc);
-            }
-        }
-        w.adapterReceiptsDigest = keccak256(ladder);
+        // routerfix6 (f): the complete raw scheduled-quarter ladder (all
+        // four scheduled keys plus the listing epoch, both venues, every
+        // scoped gauge including the retained member) replaces the former
+        // three-key digest scope; the digest stays as the comparison token,
+        // the raw ladder bytes are compared field-for-field too.
+        address[3] memory gs = [gaugeA, gaugeB, gaugeRetained];
+        w.adapterReceiptsRaw = _schedLadder(gs);
+        w.adapterReceiptsDigest = keccak256(w.adapterReceiptsRaw);
+        // chronological adapter-record read: the frozen mock exposes NO
+        // chronological getter, so the honest observation is the raw
+        // missing-getter result (status + data) — captured AND pinned to its
+        // expected dispatch-miss shape so absence can never masquerade as a
+        // fabricated record.
+        (w.chronVotiumOk, w.chronVotiumRaw) = _chronAbsence(address(votium));
+        (w.chronVoteMarketOk, w.chronVoteMarketRaw) = _chronAbsence(address(voteMarket));
         w.allowPayerVotium = token.allowance(payer, address(votium));
         w.allowPayerVoteMarket = token.allowance(payer, address(voteMarket));
+    }
+
+    /// @dev routerfix6 (f) / lister law contracts/CurveGaugeLister.sol:
+    /// 530-543: `_settleMaturedQuarter` schedules exactly four quarters at
+    /// listingEpoch + n*WEEK for n = 1..4, and listingEpoch ==
+    /// epochStart(now) == floorWeek(now) (contracts/CurveGaugeLister.sol:
+    /// 708-710). The ladder reads BOTH venues at keys n = 0..4 (the four
+    /// scheduled maturities plus the listing epoch, which is also a real
+    /// deposit-map key) for every scoped, nonzero gauge — complete
+    /// getDeposit triples, never counts alone.
+    function _schedLadder(address[3] memory gs) internal view returns (bytes memory lad) {
+        uint256 eq0 = (block.timestamp / WEEK) * WEEK;
+        for (uint256 gi = 0; gi < 3; ++gi) {
+            if (gs[gi] == address(0)) continue;
+            for (uint256 ei = 0; ei < 5; ++ei) {
+                (uint256 va, uint256 vex, bytes32 vrc) = votium.getDeposit(gs[gi], eq0 + ei * WEEK);
+                (uint256 ma, uint256 mex, bytes32 mrc) = voteMarket.getDeposit(gs[gi], eq0 + ei * WEEK);
+                lad = abi.encodePacked(lad, va, vex, vrc, ma, mex, mrc);
+            }
+        }
+    }
+
+    /// @dev routerfix6 (f) / review/ROUTERCONF4.md:240-246: chronological
+    /// adapter-record read at the frozen mock. The chronological name used
+    /// by the real adapter row (depositAt(uint256), cf. contracts/adapters/
+    /// VoteMarketAdapter.sol:353-357) has NO implementation here
+    /// (contracts/mocks/MockIncentivePlatform.sol:149-162 declares only
+    /// getDeposit/depositCount), so the call dies at dispatch: status false
+    /// with EMPTY revert bytes. Both the status and the raw bytes are
+    /// captured into the compared snapshot and the exact absence shape is
+    /// pinned here — the honest-absence observation WITNESSES:10 requires,
+    /// instead of a skip or a collapsed zero word.
+    function _chronAbsence(address venue) internal view returns (bool ok, bytes memory data) {
+        (ok, data) = venue.staticcall(abi.encodeWithSignature("depositAt(uint256)", uint256(0)));
+        require(!ok && data.length == 0, "I chron missing-getter raw observation");
     }
 
     function _assertWorldEq(World memory a, World memory b, string memory label) internal pure {
@@ -361,7 +433,7 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         c.setDefaultInitialWeight(777); // mock's own 2-arg default is nonzero
 
         (address poolA, address gaugeA) = _pool(0, 0, 0);
-        World memory before = _world(gaugeA, address(0));
+        World memory before = _world(gaugeA, address(0), address(0));
         uint256 payerBefore = token.balanceOf(payer);
 
         // routerfix5 (h)/I01 (review/ROUTERCONF.md:319-321; ROUTERCONF2.md:
@@ -392,7 +464,7 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
 
         // whole-snapshot comparison against 'before': ONLY the documented
         // paid-lane effects differ.
-        _i01PaidDeltas(before, _world(gaugeA, address(0)), "I01");
+        _i01PaidDeltas(before, _world(gaugeA, address(0), address(0)), "I01");
         require(logsA.length == 3, "PAID_RAW_WEIGHT_ZERO paid A committed log set");
         _assertAdmissionLogs(
             logsA, gaugeA, poolA, payer, int128(0), 0, recA.listingEpoch, FEE, false, "PAID_RAW_WEIGHT_ZERO paid A"
@@ -403,7 +475,7 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         vm.prank(address(dao));
         token.approve(address(lister), type(uint256).max);
         (address poolB, address gaugeB) = _pool(1, 1, 1);
-        World memory beforeB = _world(gaugeB, gaugeA);
+        World memory beforeB = _world(gaugeB, gaugeA, address(0));
         uint256 daoBefore = token.balanceOf(address(dao));
         cc.expectCall(address(validator), abi.encodeWithSignature("validateGauge(address)", gaugeB), 1);
         rv.recordLogs();
@@ -417,7 +489,7 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         _assertFullRecord(
             recB, poolB, address(dao), int128(1), FEE, CurveGaugeLister.Status.Active, 1, "PAID_RAW_WEIGHT_ZERO recB"
         );
-        _i01OwnerPaidDeltas(beforeB, _world(gaugeB, gaugeA));
+        _i01OwnerPaidDeltas(beforeB, _world(gaugeB, gaugeA, address(0)));
         require(logsB.length == 3, "PAID_RAW_WEIGHT_ZERO paid B committed log set");
         _assertAdmissionLogs(
             logsB,
@@ -464,6 +536,14 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
     /// the earlier record's fields pinned unchanged.
     function _i01OwnerPaidDeltas(World memory pre, World memory post) internal pure {
         // snapshot slots: A = the new owner-paid gauge, B = the earlier one.
+        // routerfix6 (h)/I01 / review/ROUTERCONF4.md:310-323: the collected
+        // owner-paid escrow field is now USED — aggregate liability moves by
+        // exactly FEE across this admission and reaches the expected
+        // aggregate after BOTH admissions (the former last liability assert
+        // at :387 sat BEFORE this admission; :435-436 checks token balances,
+        // not aggregate liability).
+        require(post.escrow == pre.escrow + FEE, "PAID_RAW_WEIGHT_ZERO owner-paid escrow delta exact");
+        require(post.escrow == 2 * FEE, "PAID_RAW_WEIGHT_ZERO aggregate liability after both admissions");
         require(post.payerBal == pre.payerBal, "I01 owner-paid leaves payer alone");
         require(post.payerAllow == pre.payerAllow, "I01 owner-paid leaves payer approval alone");
         require(post.listingB == pre.listingB, "I01 earlier record untouched");
@@ -487,7 +567,7 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         (address poolB, address gaugeB) = _pool(1, 0, 0);
         (address poolC, address gaugeC) = _pool(2, 0, 0);
         uint256 payerBefore = token.balanceOf(payer);
-        World memory before = _world(gaugeA, gaugeB);
+        World memory before = _world(gaugeA, gaugeB, address(0));
 
         // routerfix5 (h)/I02 (review/ROUTERCONF.md:319-321; ROUTERCONF2.md:
         // 268-270): VALIDATOR-CALL NON-OCCURRENCE is now asserted for every
@@ -532,15 +612,15 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         // Full comparison against the 'before' snapshot: exactly the two
         // DAO-free admissions moved; nothing monetary, platform- or
         // router-lifecycle-related did.
-        _i02DaoFreeDeltas(before, _world(gaugeA, gaugeB));
+        _i02DaoFreeDeltas(before, _world(gaugeA, gaugeB, address(0)));
 
         // Negative: non-owner lane fails as existing L requires.
-        World memory preC = _world(gaugeC, address(0));
+        World memory preC = _world(gaugeC, address(0), address(0));
         vm.prank(payer);
         vm.expectRevert(CurveGaugeLister.NotOwner.selector);
         lister.listGaugeNoEscrow(poolC, gaugeC, 0, 2, 1);
         require(!c.registered(gaugeC), "rejected lane no effect");
-        _assertWorldEq(preC, _world(gaugeC, address(0)), "I02 rejected lane full rollback incl receipts");
+        _assertWorldEq(preC, _world(gaugeC, address(0), address(0)), "I02 rejected lane full rollback incl receipts");
 
         // Non-occurrence CONTROL for the oracle above: the PAID lane does
         // read the pinned validator for its own candidate.
@@ -595,7 +675,7 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         _unpause();
         (address poolA, address gaugeA) = _pool(0, 0, 0);
         (address poolB, address gaugeB) = _pool(1, 0, 1);
-        World memory pre = _world(gaugeA, gaugeB);
+        World memory pre = _world(gaugeA, gaugeB, address(0));
         require(!pre.adderLister, "I03 pre-grant baseline: L ungranted");
         require(
             pre.pendingR == address(0) && !pre.retiredR && pre.lockWord == bytes32(uint256(1)),
@@ -620,7 +700,7 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         // routerfix5 (f): the rejection happened at R's gate before any
         // emit — zero log delta from ANY emitter, not just a filter.
         require(rv.getRecordedLogs().length == 0, "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK no logs from any emitter");
-        _assertWorldEq(pre, _world(gaugeA, gaugeB), "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK whole-tx rollback");
+        _assertWorldEq(pre, _world(gaugeA, gaugeB, address(0)), "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK whole-tx rollback");
         require(c.addAttempts() == 0, "no C add attempted");
         require(!c.registered(gaugeA) && !c.registered(gaugeB), "no membership");
 
@@ -642,7 +722,7 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         require(ctl.length == 3, "I03 committed control logged three");
         CurveGaugeLister.Listing memory recPc = lister.getListing(gaugePc);
         _assertAdmissionLogs(ctl, gaugePc, poolPc, address(0), int128(0), 7, recPc.listingEpoch, 0, true, "I03 control");
-        World memory postCtl = _world(gaugeA, gaugeB);
+        World memory postCtl = _world(gaugeA, gaugeB, address(0));
         require(!postCtl.regA && !postCtl.regB, "I03 rejected candidates never appeared");
         require(postCtl.listingA == pre.listingA && postCtl.listingB == pre.listingB, "I03 rejected listings absent");
         require(postCtl.cAdds == pre.cAdds + 1 && postCtl.nGauges == pre.nGauges + 1, "I03 only the control committed");
@@ -665,9 +745,9 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         rv.recordLogs();
         vm.prank(payer);
         lister.listGauge(poolC, gaugeC, 0, 2);
-        bytes32 recCHash = _i03RevokedControl(rv.getRecordedLogs(), poolC, gaugeC);
+        (bytes32 recCHash, bytes memory ladderC) = _i03RevokedControl(rv.getRecordedLogs(), poolC, gaugeC);
         _grantLister(false);
-        _i03RevokedNegatives(recCHash, poolC, gaugeC);
+        _i03RevokedNegatives(recCHash, ladderC, poolC, gaugeC);
     }
 
     /// @dev routerfix5 (f): the genuinely admitted FIRST member of the
@@ -677,19 +757,23 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
     function _i03RevokedControl(RouterVm.Log[] memory logsC, address poolC, address gaugeC)
         internal
         view
-        returns (bytes32)
+        returns (bytes32, bytes memory)
     {
         require(logsC.length == 3, "I03 revoked-fixture control logged three");
         CurveGaugeLister.Listing memory recC = lister.getListing(gaugeC);
         _assertFullRecord(recC, poolC, payer, int128(0), FEE, CurveGaugeLister.Status.Active, 2, "I03 gaugeC");
         _assertAdmissionLogs(logsC, gaugeC, poolC, payer, int128(0), 0, recC.listingEpoch, FEE, false, "I03 gaugeC");
-        return keccak256(abi.encode(recC));
+        // routerfix6 (f) / review/ROUTERCONF4.md:236-238: the retained
+        // member's receipts are part of its observation — full raw
+        // scheduled-quarter ladder (both venues x five keys incl. the four
+        // scheduled maturities) captured BEFORE the revocation.
+        return (keccak256(abi.encode(recC)), _schedLadder([gaugeC, address(0), address(0)]));
     }
 
-    function _i03RevokedNegatives(bytes32 recCHash, address poolC, address gaugeC) internal {
+    function _i03RevokedNegatives(bytes32 recCHash, bytes memory ladderC, address poolC, address gaugeC) internal {
         (address poolD, address gaugeD) = _pool(3, 0, 0);
         (address poolE, address gaugeE) = _pool(4, 0, 0);
-        World memory pre2 = _world(gaugeD, gaugeE);
+        World memory pre2 = _world(gaugeD, gaugeE, gaugeC);
         require(!pre2.adderLister, "I03 revoked baseline: flag cleared");
         rv.recordLogs();
         (bool roOk, bytes memory roRet) = _lane(payer, poolD, gaugeD, 0, 3);
@@ -701,19 +785,26 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         require(
             rv.getRecordedLogs().length == 0, "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK revoked no logs from any emitter"
         );
-        _assertWorldEq(pre2, _world(gaugeD, gaugeE), "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK revoked rollback");
-        _i03CommittedKept(recCHash, poolC, gaugeC);
+        _assertWorldEq(pre2, _world(gaugeD, gaugeE, gaugeC), "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK revoked rollback");
+        _i03CommittedKept(recCHash, ladderC, poolC, gaugeC);
     }
 
     /// @dev routerfix5 (f): the earlier committed listing is untouched by the
     /// revocation — complete record, membership, weight and counters, not a
-    /// selected-field spot check.
-    function _i03CommittedKept(bytes32 recCHash, address poolC, address gaugeC) internal view {
+    /// selected-field spot check. routerfix6 (f) / review/ROUTERCONF4.md:
+    /// 236-238: the kept comparison now runs OVER RECEIPTS too — the
+    /// retained gaugeC's full scheduled-quarter ladder re-read after the
+    /// revocation and both negatives must equal the pre-revoke capture.
+    function _i03CommittedKept(bytes32 recCHash, bytes memory ladderC, address poolC, address gaugeC) internal view {
         CurveGaugeLister.Listing memory recC2 = lister.getListing(gaugeC);
         require(keccak256(abi.encode(recC2)) == recCHash, "committed listing kept byte-for-byte");
         _assertFullRecord(recC2, poolC, payer, int128(0), FEE, CurveGaugeLister.Status.Active, 2, "I03 gaugeC kept");
         require(c.gauge_types(gaugeC) == 0 && c.get_gauge_weight(gaugeC) == 0, "committed listing kept");
         require(c.registered(gaugeC), "committed membership kept");
+        require(
+            keccak256(_schedLadder([gaugeC, address(0), address(0)])) == keccak256(ladderC),
+            "LISTER_AUTH_FRAME_AND_FULL_ROLLBACK revoked kept member receipts byte-for-byte"
+        );
     }
 
     function _lane(address who, address pool, address gauge, uint256 gaugeIndex, uint256 handlerId)
@@ -764,10 +855,11 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
             logsOk, gaugeOk, poolOk, payer, int128(0), 0, recOk.listingEpoch, FEE, false, "I04 positive"
         );
 
-        // Raw C failure bubbles through R unchanged.
-        (address poolA, address gaugeA) = _pool(0, 1, 0);
-        World memory pre = _world(gaugeA, address(0));
-        c.setAddMode(1);
+        // routerfix6 (f): the three negative subcases are stack-lean
+        // helpers, each whole-snapshot comparison now carrying the positive
+        // control as the retained THIRD ladder member (receipts observed
+        // across all five keys incl. the four scheduled maturities) plus the
+        // raw gauge_types/chronological-absence captures.
         // the fee frame runs inside EVERY rejected paid admission below
         // (the pull precedes the controller seat in listGauge): raw fail,
         // malformed read and lying membership = 3 executed-then-rolled-back
@@ -778,6 +870,16 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
             abi.encodeWithSignature("transferFrom(address,address,uint256)", payer, address(lister), FEE),
             3
         );
+        _i04RawFail(gaugeOk);
+        _i04Malformed(gaugeOk);
+        _i04Lying(gaugeOk);
+    }
+
+    /// @dev I04 negative 1: raw C failure bubbles through R unchanged.
+    function _i04RawFail(address gaugeOk) internal {
+        (address poolA, address gaugeA) = _pool(0, 1, 0);
+        World memory pre = _world(gaugeA, address(0), gaugeOk);
+        c.setAddMode(1);
         rv.recordLogs();
         (bool a1, bytes memory r1) = _lane(payer, poolA, gaugeA, 1, 0);
         c.setAddMode(0);
@@ -788,86 +890,85 @@ contract GaugeControllerAdminIntegrationTest is TestBase {
         // (not a lister/venue filter), and the World equality (incl. R
         // lifecycle and the receipt ladder) is the committed oracle.
         require(rv.getRecordedLogs().length == 0, "LISTER_POSTCHECK_FULL_ROLLBACK raw fail no logs from any emitter");
-        _assertWorldEq(pre, _world(gaugeA, address(0)), "LISTER_POSTCHECK_FULL_ROLLBACK raw fail");
+        _assertWorldEq(pre, _world(gaugeA, address(0), gaugeOk), "LISTER_POSTCHECK_FULL_ROLLBACK raw fail");
+    }
 
-        // Malformed membership read reverts the whole admission.
+    /// @dev I04 negative 2: malformed membership read reverts the whole
+    /// admission (executed inner frames visible as trace only).
+    function _i04Malformed(address gaugeOk) internal {
         (address poolB, address gaugeB) = _pool(0, 2, 0);
-        pre = _world(gaugeB, address(0));
+        World memory pre = _world(gaugeB, address(0), gaugeOk);
         c.setTypesMode(2);
         rv.recordLogs();
         (bool a2,) = _lane(payer, poolB, gaugeB, 2, 0);
         c.setTypesMode(0);
         require(!a2, "LISTER_POSTCHECK_FULL_ROLLBACK malformed");
-        {
-            // routerfix5 (f) / WITNESSES:10 committed-vs-trace oracle: the
-            // inner frames DID execute (their trace logs are captured, with
-            // raw payloads compared) while the enclosing low-level failure
-            // plus the complete World equality prove nothing committed —
-            // recorder trace entries are never treated as committed logs.
-            RouterVm.Log[] memory lg2 = rv.getRecordedLogs();
-            require(lg2.length == 2, "malformed window shows exactly the rolled-back inner frames");
-            bytes32[] memory nT = new bytes32[](1);
-            nT[0] = keccak256("NewGauge(address,int128,uint256)");
-            require(
-                _countExactLogUnit(lg2, address(c), nT, abi.encode(gaugeB, int128(0), uint256(0))) == 1,
-                "malformed window C NewGauge trace payload"
-            );
-            bytes32[] memory rT = new bytes32[](3);
-            rT[0] = keccak256("GaugeAdded(address,address,int128,uint256)");
-            rT[1] = bytes32(uint256(uint160(address(lister))));
-            rT[2] = bytes32(uint256(uint160(gaugeB)));
-            require(
-                _countExactLogUnit(lg2, address(r), rT, abi.encode(int128(0), uint256(0))) == 1,
-                "malformed window R GaugeAdded trace payload"
-            );
-            require(
-                _countEmitter(lg2, address(lister)) == 0, "LISTER_POSTCHECK_FULL_ROLLBACK malformed no lister event"
-            );
-            require(
-                _countEmitter(lg2, address(votium)) + _countEmitter(lg2, address(voteMarket)) == 0,
-                "LISTER_POSTCHECK_FULL_ROLLBACK malformed no venue receipt event"
-            );
-        }
-        _assertWorldEq(pre, _world(gaugeB, address(0)), "LISTER_POSTCHECK_FULL_ROLLBACK malformed");
+        // routerfix5 (f) / WITNESSES:10 committed-vs-trace oracle: the
+        // inner frames DID execute (their trace logs are captured, with
+        // raw payloads compared) while the enclosing low-level failure
+        // plus the complete World equality prove nothing committed —
+        // recorder trace entries are never treated as committed logs.
+        RouterVm.Log[] memory lg2 = rv.getRecordedLogs();
+        require(lg2.length == 2, "malformed window shows exactly the rolled-back inner frames");
+        bytes32[] memory nT = new bytes32[](1);
+        nT[0] = keccak256("NewGauge(address,int128,uint256)");
+        require(
+            _countExactLogUnit(lg2, address(c), nT, abi.encode(gaugeB, int128(0), uint256(0))) == 1,
+            "malformed window C NewGauge trace payload"
+        );
+        bytes32[] memory rT = new bytes32[](3);
+        rT[0] = keccak256("GaugeAdded(address,address,int128,uint256)");
+        rT[1] = bytes32(uint256(uint160(address(lister))));
+        rT[2] = bytes32(uint256(uint160(gaugeB)));
+        require(
+            _countExactLogUnit(lg2, address(r), rT, abi.encode(int128(0), uint256(0))) == 1,
+            "malformed window R GaugeAdded trace payload"
+        );
+        require(_countEmitter(lg2, address(lister)) == 0, "LISTER_POSTCHECK_FULL_ROLLBACK malformed no lister event");
+        require(
+            _countEmitter(lg2, address(votium)) + _countEmitter(lg2, address(voteMarket)) == 0,
+            "LISTER_POSTCHECK_FULL_ROLLBACK malformed no venue receipt event"
+        );
+        _assertWorldEq(pre, _world(gaugeB, address(0), gaugeOk), "LISTER_POSTCHECK_FULL_ROLLBACK malformed");
         require(!c.registered(gaugeB), "malformed registration rolled back");
+    }
 
-        // Lying membership after add forces L's postcheck (MembershipFailed).
+    /// @dev I04 negative 3: lying membership after add forces L's postcheck.
+    function _i04Lying(address gaugeOk) internal {
         (address poolC, address gaugeC) = _pool(0, 3, 0);
-        pre = _world(gaugeC, address(0));
+        World memory pre = _world(gaugeC, address(0), gaugeOk);
         c.setTypesMode(1); // gauge_types lies +100 once registered
         rv.recordLogs();
         (bool a3, bytes memory r3) = _lane(payer, poolC, gaugeC, 3, 0);
         c.setTypesMode(0);
         require(!a3, "LISTER_POSTCHECK_FULL_ROLLBACK lying");
         require(_isErr(r3, CurveGaugeLister.MembershipFailed.selector, ""), "postcheck error");
-        {
-            // same oracle shape as the malformed case: executed-then-
-            // rolled-back inner frames are visible as trace only; nothing
-            // committed anywhere — C counters, membership, balances,
-            // allowances, receipt ladder, R lifecycle all unchanged.
-            RouterVm.Log[] memory lg3 = rv.getRecordedLogs();
-            require(lg3.length == 2, "lying window shows exactly the rolled-back inner frames");
-            bytes32[] memory nT = new bytes32[](1);
-            nT[0] = keccak256("NewGauge(address,int128,uint256)");
-            require(
-                _countExactLogUnit(lg3, address(c), nT, abi.encode(gaugeC, int128(0), uint256(0))) == 1,
-                "lying window C NewGauge trace payload"
-            );
-            bytes32[] memory rT = new bytes32[](3);
-            rT[0] = keccak256("GaugeAdded(address,address,int128,uint256)");
-            rT[1] = bytes32(uint256(uint160(address(lister))));
-            rT[2] = bytes32(uint256(uint160(gaugeC)));
-            require(
-                _countExactLogUnit(lg3, address(r), rT, abi.encode(int128(0), uint256(0))) == 1,
-                "lying window R GaugeAdded trace payload"
-            );
-            require(_countEmitter(lg3, address(lister)) == 0, "LISTER_POSTCHECK_FULL_ROLLBACK lying no lister event");
-            require(
-                _countEmitter(lg3, address(votium)) + _countEmitter(lg3, address(voteMarket)) == 0,
-                "LISTER_POSTCHECK_FULL_ROLLBACK lying no venue receipt event"
-            );
-        }
-        _assertWorldEq(pre, _world(gaugeC, address(0)), "LISTER_POSTCHECK_FULL_ROLLBACK lying");
+        // same oracle shape as the malformed case: executed-then-
+        // rolled-back inner frames are visible as trace only; nothing
+        // committed anywhere — C counters, membership, balances,
+        // allowances, receipt ladder, R lifecycle all unchanged.
+        RouterVm.Log[] memory lg3 = rv.getRecordedLogs();
+        require(lg3.length == 2, "lying window shows exactly the rolled-back inner frames");
+        bytes32[] memory nT = new bytes32[](1);
+        nT[0] = keccak256("NewGauge(address,int128,uint256)");
+        require(
+            _countExactLogUnit(lg3, address(c), nT, abi.encode(gaugeC, int128(0), uint256(0))) == 1,
+            "lying window C NewGauge trace payload"
+        );
+        bytes32[] memory rT = new bytes32[](3);
+        rT[0] = keccak256("GaugeAdded(address,address,int128,uint256)");
+        rT[1] = bytes32(uint256(uint160(address(lister))));
+        rT[2] = bytes32(uint256(uint160(gaugeC)));
+        require(
+            _countExactLogUnit(lg3, address(r), rT, abi.encode(int128(0), uint256(0))) == 1,
+            "lying window R GaugeAdded trace payload"
+        );
+        require(_countEmitter(lg3, address(lister)) == 0, "LISTER_POSTCHECK_FULL_ROLLBACK lying no lister event");
+        require(
+            _countEmitter(lg3, address(votium)) + _countEmitter(lg3, address(voteMarket)) == 0,
+            "LISTER_POSTCHECK_FULL_ROLLBACK lying no venue receipt event"
+        );
+        _assertWorldEq(pre, _world(gaugeC, address(0), gaugeOk), "LISTER_POSTCHECK_FULL_ROLLBACK lying");
         require(!c.registered(gaugeC), "registration rolled back");
     }
 
