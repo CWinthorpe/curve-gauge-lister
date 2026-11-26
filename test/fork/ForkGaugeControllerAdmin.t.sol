@@ -43,6 +43,10 @@ interface IRouterEscrow {
 
 interface IRouterVoting {
     function token() external view returns (address);
+    /// @dev routerfix5 (b): AppProxyBase self-report of the pinned
+    /// implementation (review/routerconf3/graph-readback.json: every graph
+    /// proxy answers implementation() at the pin).
+    function implementation() external view returns (address);
     function minBalance() external view returns (uint256);
     function minTime() external view returns (uint256);
     function votesLength() external view returns (uint256);
@@ -68,10 +72,24 @@ interface IRouterAgent {
     /// @dev CONF-04(b): AppBase appId() via the Agent proxy (proves the
     /// delegatecall reaches the registered implementation).
     function appId() external view returns (bytes32);
+    /// @dev routerfix5 (b): proxy-reported implementation pointer.
+    function implementation() external view returns (address);
+    /// @dev routerfix5 (a) (review/ROUTERCONF2.md:187-206): the REAL Agent
+    /// permission entrypoint (verified source
+    /// review/routerplan/evidence/agent.sol:1253-1268) — forwards the
+    /// runtime uint256[] to kernel.hasPermission WITHOUT any shifting, so
+    /// DEPLOYMENT:16 parameter evidence must go through THIS call with the
+    /// raw arr(_target, _ethValue, uint256(_getSig(_data))) words
+    /// (agent.sol:1501-1503), not ACL.hasPermission with hand-shifted
+    /// Permission words.
+    function canPerform(address _sender, bytes32 _role, uint256[] calldata _params) external view returns (bool);
 }
 
 interface IRouterKernel {
     function acl() external view returns (address);
+    /// @dev routerfix5 (b): KernelProxy implementation getter (live-verified
+    /// at the pin; graph-readback kernel entry).
+    function implementation() external view returns (address);
     /// @dev CONF-04(b): the same getApp(bytes32,bytes32) entrypoint the
     /// AppProxyFallback runtime uses for base resolution (observed
     /// selector 0xbe00bbd8 in the retained F09 executeVote trace).
@@ -79,6 +97,8 @@ interface IRouterKernel {
 }
 
 interface IRouterAcl {
+    /// @dev routerfix5 (b): ACL proxy implementation getter.
+    function implementation() external view returns (address);
     function hasPermission(address who, address where, bytes32 role) external view returns (bool);
     /// @dev Verified-deployment ACL form (blockscout ABI of the Kernel's ACL
     /// at the pin): uint256[] context of Aragon Permission words
@@ -96,6 +116,11 @@ interface IRouterAcl {
 
 interface IRouterScriptRegistry {
     function getScriptExecutor(bytes calldata script) external view returns (address);
+    /// @dev routerfix5 (b): the registry proxy's OWN pinned implementation
+    /// pointer (review/routerconf3/graph-registry-disassembly.txt: the
+    /// implementation() arm SLOADs the PUSH32 position at 0x02bf;
+    /// graph-readback.json confirms it answers).
+    function implementation() external view returns (address);
     /// @dev CONF-04(b) graph reads via the registry proxy.
     function kernel() external view returns (address);
     function appId() external view returns (bytes32);
@@ -194,6 +219,47 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
     bytes32 internal constant T_C_APPLY_OWNERSHIP = keccak256("ApplyOwnership(address)");
     bytes32 internal constant T_R_COMMITTED = keccak256("ControllerTransferCommitted(address)");
     bytes32 internal constant T_R_APPLIED = keccak256("ControllerTransferApplied(address)");
+
+    /// @dev routerfix5 (b) (review/ROUTERCONF2.md:208-216; the exact
+    /// remaining cell of review/ROUTERCONF3.md:179-211): complete
+    /// implementation/RUNTIME identity binding for the governance graph the
+    /// F09/F10 scripts traverse. These literals are the REVIEWED FIXED-PIN
+    /// inputs at header 26401019: the implementation addresses come from
+    /// review/routerplan/evidence/reads.json (agent_impl, voting_impl) and
+    /// review/routerconf3/graph-readback.json (kernel instance + the
+    /// Agent/Voting/ACL/Kernel/Registry implementations and proxy sizes);
+    /// the registry proxy's own pinned implementation position is the PUSH32
+    /// at 0x02bf of review/routerconf3/graph-registry-disassembly.txt; the
+    /// runtime keccak values were recomputed from fresh eth_getCode reads at
+    /// the same pinned header and are retained in review/routerfix5/receipts
+    /// (graph-pins.json), matching the retained graph-*-code.stdout bytes.
+    address internal constant KERNEL_PIN = 0xad06868167BC5Ac5cFcbEf2CAFa82bc76961D72d;
+    address internal constant ACL_PIN = 0xBd0697BA421e7fEc529E3E76D9e9F3a710490369;
+    address internal constant IMPL_AGENT_PIN = 0x3A93C17FC82CC33420d1809dDA9Fb715cc89dd37; // reads.json
+    address internal constant IMPL_VOTING_PIN = 0xa4D1a2693589840BABb7f3A44D14Fdf41b3bF1Fe; // reads.json
+    address internal constant IMPL_ACL_PIN = 0x81F7564e413586f1f99fDe55740Ac52b43cA99c9; // graph-readback
+    address internal constant IMPL_REGISTRY_PIN = 0xBF1Ce0Bc4EdaAD8e576b3b55e19c4C15Cf6999eb; // graph-readback
+    address internal constant KERNEL_BASE_PIN = 0x2b33CF282f867A7FF693A66e11B0FcC5552e4425; // graph-readback
+    bytes32 internal constant REGISTRY_IMPL_POSITION =
+        0xdee64df20d65e53d7f51cb6ab6d921a0a6a638a91e942e1d8d02df28e31c038e; // disasm 0x02bf
+    bytes32 internal constant H_APP_PROXY_RUNTIME = 0xb9c1c929064cd21734c102a698e68bf617feefcfa5a9f62407c45401546736bf; // 1035 bytes
+    bytes32 internal constant H_KERNEL_PROXY_RUNTIME =
+        0x9a80ab6c17130878ed084a87761dcad89f9fcda9f8dd49be3dc9ef8bcd9e3a64; // 898 bytes
+    bytes32 internal constant H_REGISTRY_PROXY_RUNTIME =
+        0xe684b4c75b19e2fd536d1c5815993293a64f0600084e5446dc482e69b97cd383; // 858 bytes
+    bytes32 internal constant H_IMPL_AGENT_RUNTIME = 0xfb8566af63db2e0e4a0541cba4a21263453768b62fc2c6874a89f89647c159d3;
+    bytes32 internal constant H_IMPL_VOTING_RUNTIME =
+        0xe1a123abfd275f3d005acdd4ac745a6307fed819baeea8ba3abd60c4a7ac5bdd;
+    bytes32 internal constant H_IMPL_ACL_RUNTIME = 0x13699df4867ea32eb286592257d3655fc4b40d6d7fdc425f38e550d3e49f3fdf;
+    bytes32 internal constant H_IMPL_REGISTRY_RUNTIME =
+        0x14808afd80658d1a88d2cd1909f044de22da0fbc6e1235f74a5c68dbb3af04b2;
+    bytes32 internal constant H_IMPL_KERNEL_RUNTIME =
+        0xfb68276e556a938a40d9b1d771def5e66f94e466e4bc12b5fea458dfeb0daccd;
+    bytes32 internal constant H_CALLS_EXECUTOR_RUNTIME =
+        0x68d61e6c46366b54d41557eb19eeb97d738cced59db360af7936cf299fb6c212;
+    uint256 internal constant APP_PROXY_RUNTIME_BYTES = 1035;
+    uint256 internal constant KERNEL_PROXY_RUNTIME_BYTES = 898;
+    uint256 internal constant REGISTRY_PROXY_RUNTIME_BYTES = 858;
 
     // escrow storage bases (reverse-engineered at the pin via the public
     // getters, verified live inside _fundSimulatedHolder; Vyper 0.2.x maps
@@ -369,6 +435,15 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         return script;
     }
 
+    /// @dev routerfix5 (g): true when EVERY recorded log in the window comes
+    /// from `allowed` (used to bound negative windows to fee-pull traces).
+    function _emittersOnly(RouterForkVm.Log[] memory logs, address allowed) internal pure returns (bool) {
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].emitter != allowed) return false;
+        }
+        return true;
+    }
+
     function _logCount(RouterForkVm.Log[] memory logs, address emitter, bytes32 t0) internal pure returns (uint256 n) {
         for (uint256 i = 0; i < logs.length; ++i) {
             if (logs[i].emitter == emitter && logs[i].topics.length > 0 && logs[i].topics[0] == t0) n += 1;
@@ -487,6 +562,105 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         require(
             IRouterCallsScript(CALLS_EXECUTOR).executorType() == CALLS_SCRIPT_EXECUTOR_TYPE,
             "FORK_REAL_GOVERNANCE_TRANSPORT executor type"
+        );
+        // routerfix5 (b) (review/ROUTERCONF3.md:179-211): nonempty-code
+        // checks alone are not identity evidence. Bind the resolved
+        // implementations, every proxy's OWN resolution path and the
+        // complete runtime bytes of each graph object to the reviewed
+        // fixed-pin inputs — including the registry proxy's pinned
+        // implementation pointer that the kernel base lookup never reads.
+        _f09ImplementationIdentities(kernel, acl, implAgent, implVoting, implAcl, implRegistry, implKernel);
+        _f09RegistryPinnedEdge(implRegistry);
+    }
+
+    /// @dev routerfix5 (b): expected-implementation identity + complete
+    /// runtime-byte binding for the whole governance graph the passing
+    /// ballots traverse. Proxy self-report, kernel base-namespace lookup and
+    /// the reviewed pin must agree; runtime keccaks pin the exact code.
+    function _f09ImplementationIdentities(
+        address kernel,
+        address acl,
+        address implAgent,
+        address implVoting,
+        address implAcl,
+        address implRegistry,
+        address implKernel
+    ) internal view {
+        string memory t = "FORK_REAL_GOVERNANCE_TRANSPORT ";
+        require(kernel == KERNEL_PIN, string.concat(t, "kernel instance pinned"));
+        require(acl == ACL_PIN, string.concat(t, "ACL instance pinned"));
+        // each proxy reports its own implementation and it equals BOTH the
+        // kernel base-namespace resolution and the reviewed fixed pin.
+        require(
+            IRouterAgent(DAO).implementation() == implAgent && implAgent == IMPL_AGENT_PIN,
+            string.concat(t, "Agent proxy->impl pinned")
+        );
+        require(
+            IRouterVoting(VOTING).implementation() == implVoting && implVoting == IMPL_VOTING_PIN,
+            string.concat(t, "Voting proxy->impl pinned")
+        );
+        require(
+            IRouterAcl(acl).implementation() == implAcl && implAcl == IMPL_ACL_PIN,
+            string.concat(t, "ACL proxy->impl pinned")
+        );
+        require(implRegistry == IMPL_REGISTRY_PIN, string.concat(t, "registry base impl pinned"));
+        require(implKernel == KERNEL_BASE_PIN, string.concat(t, "kernel base impl pinned"));
+        require(
+            IRouterKernel(kernel).implementation() == implKernel
+                && address(uint160(uint256(rvf.load(kernel, KERNEL_PROXY_BASE_POSITION)))) == KERNEL_BASE_PIN,
+            string.concat(t, "kernel proxy resolution pinned")
+        );
+        // complete runtime identities — proxies
+        require(
+            keccak256(DAO.code) == H_APP_PROXY_RUNTIME && DAO.code.length == APP_PROXY_RUNTIME_BYTES,
+            string.concat(t, "Agent proxy runtime")
+        );
+        require(
+            keccak256(VOTING.code) == H_APP_PROXY_RUNTIME && VOTING.code.length == APP_PROXY_RUNTIME_BYTES,
+            string.concat(t, "Voting proxy runtime")
+        );
+        require(
+            keccak256(acl.code) == H_APP_PROXY_RUNTIME && acl.code.length == APP_PROXY_RUNTIME_BYTES,
+            string.concat(t, "ACL proxy runtime")
+        );
+        require(
+            keccak256(kernel.code) == H_KERNEL_PROXY_RUNTIME && kernel.code.length == KERNEL_PROXY_RUNTIME_BYTES,
+            string.concat(t, "kernel proxy runtime")
+        );
+        require(
+            keccak256(SCRIPT_REGISTRY.code) == H_REGISTRY_PROXY_RUNTIME
+                && SCRIPT_REGISTRY.code.length == REGISTRY_PROXY_RUNTIME_BYTES,
+            string.concat(t, "registry proxy runtime")
+        );
+        // the registry proxy is the DIFFERENT 858-byte runtime the reviewer
+        // observed, never silently the same AppProxyFallback as the apps.
+        require(
+            keccak256(SCRIPT_REGISTRY.code) != keccak256(DAO.code), string.concat(t, "registry proxy runtime distinct")
+        );
+        // complete runtime identities — implementations + executor
+        require(keccak256(implAgent.code) == H_IMPL_AGENT_RUNTIME, string.concat(t, "Agent impl runtime"));
+        require(keccak256(implVoting.code) == H_IMPL_VOTING_RUNTIME, string.concat(t, "Voting impl runtime"));
+        require(keccak256(implAcl.code) == H_IMPL_ACL_RUNTIME, string.concat(t, "ACL impl runtime"));
+        require(keccak256(implRegistry.code) == H_IMPL_REGISTRY_RUNTIME, string.concat(t, "registry impl runtime"));
+        require(keccak256(implKernel.code) == H_IMPL_KERNEL_RUNTIME, string.concat(t, "kernel impl runtime"));
+        require(keccak256(CALLS_EXECUTOR.code) == H_CALLS_EXECUTOR_RUNTIME, string.concat(t, "executor runtime"));
+    }
+
+    /// @dev routerfix5 (b) (review/ROUTERCONF3.md:189-203): the concrete
+    /// unbound graph edge — the registry proxy dispatches through its OWN
+    /// pinned implementation position, which the kernel base-namespace
+    //  lookup (getApp bases) never reads. Bind raw slot, proxy getter and
+    // the kernel-derived identity together.
+    function _f09RegistryPinnedEdge(address implRegistry) internal view {
+        string memory t = "FORK_REAL_GOVERNANCE_TRANSPORT ";
+        bytes32 slot = rvf.load(SCRIPT_REGISTRY, REGISTRY_IMPL_POSITION);
+        require(address(uint160(uint256(slot))) == IMPL_REGISTRY_PIN, string.concat(t, "registry pinned slot pointer"));
+        require(
+            IRouterScriptRegistry(SCRIPT_REGISTRY).implementation() == IMPL_REGISTRY_PIN,
+            string.concat(t, "registry proxy implementation()")
+        );
+        require(
+            address(uint160(uint256(slot))) == implRegistry, string.concat(t, "registry pinned edge equals kernel base")
         );
     }
 
@@ -786,8 +960,44 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         assertEq(uint256(int256(_c().n_gauges())), nBefore + 1, "FORK_PAID_RAW_ZERO count");
         _assertI128Eq(_c().gauge_types(GAUGE_PRIMARY), int128(0), "FORK_PAID_RAW_ZERO canonical type");
         assertEq(_c().get_gauge_weight(GAUGE_PRIMARY), 0, "FORK_PAID_RAW_ZERO raw weight zero");
-        require(_logCount(logs, CONTROLLER, T_NEW_GAUGE_KEC) == 1, "FORK_PAID_RAW_ZERO C NewGauge");
-        require(_logCount(logs, address(t.router), T_GAUGE_ADDED) == 1, "FORK_PAID_RAW_ZERO R GaugeAdded");
+        // routerfix5 (h)/F03 (review/ROUTERCONF.md:319-321; review/
+        // ROUTERCONF2.md:271): FULL event payloads, not topic0 counts —
+        // emitter, complete topics array and exact data words for both
+        // audit events, the lister's GaugeListed and the real crvUSD fee
+        // Transfer.
+        bytes32[] memory ngT = new bytes32[](1);
+        ngT[0] = T_NEW_GAUGE_KEC;
+        require(
+            _countExactLog(logs, CONTROLLER, ngT, abi.encode(GAUGE_PRIMARY, int128(0), uint256(0))) == 1,
+            "FORK_PAID_RAW_ZERO C NewGauge full payload"
+        );
+        bytes32[] memory gaT = new bytes32[](3);
+        gaT[0] = T_GAUGE_ADDED;
+        gaT[1] = bytes32(uint256(uint160(address(t.lister))));
+        gaT[2] = bytes32(uint256(uint160(GAUGE_PRIMARY)));
+        require(
+            _countExactLog(logs, address(t.router), gaT, abi.encode(int128(0), uint256(0))) == 1,
+            "FORK_PAID_RAW_ZERO R GaugeAdded full payload"
+        );
+        bytes32[] memory trT = new bytes32[](3);
+        trT[0] = keccak256("Transfer(address,address,uint256)");
+        trT[1] = bytes32(uint256(uint160(payer())));
+        trT[2] = bytes32(uint256(uint160(address(t.lister))));
+        require(_countExactLog(logs, CRVUSD, trT, abi.encode(FEE)) == 1, "FORK_PAID_RAW_ZERO fee Transfer payload");
+        bytes32[] memory glT = new bytes32[](4);
+        glT[0] = keccak256("GaugeListed(address,address,address,int128,uint256,uint256,bool)");
+        glT[1] = bytes32(uint256(uint160(GAUGE_PRIMARY)));
+        glT[2] = bytes32(uint256(uint160(POOL_PRIMARY)));
+        glT[3] = bytes32(uint256(uint160(payer())));
+        require(
+            _countExactLog(
+                logs,
+                address(t.lister),
+                glT,
+                abi.encode(int128(0), uint256(t.lister.epochStart(block.timestamp)), FEE, false)
+            ) == 1,
+            "FORK_PAID_RAW_ZERO GaugeListed full payload"
+        );
         require(address(t.router) != address(t.lister), "FORK_PAID_RAW_ZERO R distinct from L");
         assertEq(IErc20Venue(CRVUSD).balanceOf(address(t.router)), 0, "FORK_PAID_RAW_ZERO no fee to R");
         // and the router never fabricated membership: the real controller
@@ -811,6 +1021,11 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         RouterTrio memory t = _deployRouterTrio(10_000);
         _seatRouter(t.router);
         _grantLister(t.router, address(t.lister), true);
+        // routerfix5 (h)/F04 (review/ROUTERCONF.md:319-321; review/
+        // ROUTERCONF2.md:272-273): FULL count delta tracked across every
+        // admission, not a registration spot check.
+        int128 nStart = _c().n_gauges();
+        int128 tStart = _c().n_gauge_types();
 
         // DAO-free lane WHILE PAUSED: supplied nonzero weight forwarded exactly
         fvm.prank(DAO);
@@ -819,6 +1034,7 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         _assertI128Eq(_c().gauge_types(GAUGE_PRIMARY), DERIVED_TYPE, "type kept");
         assertEq(t.lister.totalEscrow(), 0, "no escrow on DAO lane");
         assertTrue(t.lister.paused(), "FORK_DAO_WEIGHT_AND_INDEPENDENCE still paused");
+        _assertI128Eq(_c().n_gauges(), nStart + 1, "FORK_DAO_WEIGHT_AND_INDEPENDENCE count after lane 1");
 
         // Independent D route through the router on raw-valid separate gauges
         address synth = _synthGauge("router-exec fork independent dao gauge");
@@ -826,6 +1042,7 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         t.router.add_gauge(synth, int128(1), uint256(31337));
         assertEq(_c().get_gauge_weight(synth), 31337, "FORK_DAO_WEIGHT_AND_INDEPENDENCE independent weight");
         _assertI128Eq(t.router.gauge_types(synth), int128(1), "independent membership");
+        _assertI128Eq(_c().n_gauges(), nStart + 2, "FORK_DAO_WEIGHT_AND_INDEPENDENCE count after D add 1");
 
         fvm.prank(DAO);
         t.router.add_gauge(_synthGauge("router-exec zero lane gauge"), int128(2), uint256(0));
@@ -834,14 +1051,49 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
             0,
             "FORK_DAO_WEIGHT_AND_INDEPENDENCE zero kept"
         );
+        _assertI128Eq(_c().n_gauges(), nStart + 3, "FORK_DAO_WEIGHT_AND_INDEPENDENCE count after D add 2");
 
         // Negative: revoked L cannot impair the direct DAO route (no clamp,
         // no fee on that route)
         _grantLister(t.router, address(t.lister), false);
+        address postRevoked = _synthGauge("router-exec post-revoke gauge");
         fvm.prank(DAO);
-        t.router.add_gauge(_synthGauge("router-exec post-revoke gauge"), int128(0), uint256(7));
-        assertTrue(_isRegistered(_synthGauge("router-exec post-revoke gauge")), "D route after revoke");
+        t.router.add_gauge(postRevoked, int128(0), uint256(7));
+        assertTrue(_isRegistered(postRevoked), "D route after revoke");
+        _assertI128Eq(_c().n_gauges(), nStart + 4, "FORK_DAO_WEIGHT_AND_INDEPENDENCE full count delta");
         assertEq(IErc20Venue(CRVUSD).balanceOf(address(t.lister)), 0, "no fee entered L");
+
+        // routerfix5 (h)/F04: a post-revoke INDEPENDENT ADMIN OPERATION,
+        // distinct from the add above — D keeps the full mediated type/
+        // weight administration through R while L stays revoked, with
+        // literal readbacks on the real controller.
+        assertFalse(t.router.isAdder(address(t.lister)), "L still revoked for the admin lane");
+        (bool cwk, bytes memory cwRet) = _callFromAddr(
+            DAO,
+            address(t.router),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSignature("change_gauge_weight(address,uint256)", postRevoked, uint256(99))
+            )
+        );
+        require(
+            cwk && cwRet.length == abi.encode(new bytes(0)).length,
+            "FORK_DAO_WEIGHT_AND_INDEPENDENCE post-revoke weight admin call ok"
+        );
+        assertEq(
+            _c().get_gauge_weight(postRevoked), 99, "FORK_DAO_WEIGHT_AND_INDEPENDENCE post-revoke weight literal 99"
+        );
+        (bool twk,) = _callFromAddr(
+            DAO,
+            address(t.router),
+            abi.encodeWithSelector(
+                GaugeControllerAdmin.execute.selector,
+                abi.encodeWithSignature("change_type_weight(int128,uint256)", int128(0), uint256(9001))
+            )
+        );
+        require(twk, "FORK_DAO_WEIGHT_AND_INDEPENDENCE post-revoke type-weight admin ok");
+        assertEq(r_type_weight(0), 9001, "FORK_DAO_WEIGHT_AND_INDEPENDENCE post-revoke type weight literal 9001");
+        _assertI128Eq(_c().n_gauge_types(), tStart, "type count untouched by the weight lane");
     }
 
     // ------------------------------------------------------------------
@@ -880,35 +1132,107 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         _fundPayer(payer(), 1);
         _approveFee(address(t.lister));
         _activate(t.lister);
-        _runBothLaneNegatives(t);
+        _runBothLaneNegatives(t, address(0));
     }
 
     function _revokedNegatives() internal {
         RouterTrio memory t = _deployRouterTrio(10_000);
         _seatRouter(t.router);
         _grantLister(t.router, address(t.lister), true);
-        _fundPayer(payer(), 1);
+        _fundPayer(payer(), 2);
         _approveFee(address(t.lister));
         _activate(t.lister);
-        // revoke FIRST: both lanes must fail while the pinned candidate is
-        // still unregistered at C (auth rejection is the only difference)
+        // routerfix5 (g) / review/ROUTERCONF2.md:250-258: the subfixture
+        // description ("granted, used once, then revoked") is now literally
+        // executed. The FIRST admitted member is genuinely committed and
+        // FULLY OBSERVED — complete event payloads (C NewGauge, R GaugeAdded,
+        // L GaugeListed, real crvUSD fee Transfer) and keyed state — BEFORE
+        // the revocation; its state is pinned in both negative snapshots and
+        // must survive byte-for-byte. The pinned controller registry holds
+        // exactly two admitted candidates (the primary scan pair and the
+        // provenance-mirrored legacy pair from ForkTrustedFactory identity
+        // B), so the used-once member takes the legacy candidate and the
+        // auth-gated negatives keep the primary scan candidate fresh.
+        require(!_isRegistered(GAUGE_LEGACY_PROBE), "legacy candidate free for the first member");
+        rvf.recordLogs();
+        fvm.prank(payer());
+        t.lister.listGauge(POOL_LEGACY_PROBE, GAUGE_LEGACY_PROBE, LEGACY_GAUGE_INDEX, LEGACY_HANDLER_ID);
+        RouterForkVm.Log[] memory firstLogs = rvf.getRecordedLogs();
+        require(_isRegistered(GAUGE_LEGACY_PROBE), "revoked subfixture admitted its first member");
+        bytes32[] memory ngT = new bytes32[](1);
+        ngT[0] = T_NEW_GAUGE_KEC;
+        require(
+            _countExactLog(firstLogs, CONTROLLER, ngT, abi.encode(GAUGE_LEGACY_PROBE, LEGACY_GAUGE_TYPE, uint256(0)))
+                == 1,
+            "FORK_AUTH_FULL_ROLLBACK first member C NewGauge payload"
+        );
+        bytes32[] memory gaT = new bytes32[](3);
+        gaT[0] = T_GAUGE_ADDED;
+        gaT[1] = bytes32(uint256(uint160(address(t.lister))));
+        gaT[2] = bytes32(uint256(uint160(GAUGE_LEGACY_PROBE)));
+        require(
+            _countExactLog(firstLogs, address(t.router), gaT, abi.encode(LEGACY_GAUGE_TYPE, uint256(0))) == 1,
+            "FORK_AUTH_FULL_ROLLBACK first member R GaugeAdded payload"
+        );
+        bytes32[] memory glT = new bytes32[](4);
+        glT[0] = keccak256("GaugeListed(address,address,address,int128,uint256,uint256,bool)");
+        glT[1] = bytes32(uint256(uint160(GAUGE_LEGACY_PROBE)));
+        glT[2] = bytes32(uint256(uint160(POOL_LEGACY_PROBE)));
+        glT[3] = bytes32(uint256(uint160(payer())));
+        require(
+            _countExactLog(
+                firstLogs,
+                address(t.lister),
+                glT,
+                abi.encode(LEGACY_GAUGE_TYPE, uint256(t.lister.epochStart(block.timestamp)), FEE, false)
+            ) == 1,
+            "FORK_AUTH_FULL_ROLLBACK first member L GaugeListed payload"
+        );
+        bytes32[] memory trT = new bytes32[](3);
+        trT[0] = keccak256("Transfer(address,address,uint256)");
+        trT[1] = bytes32(uint256(uint160(payer())));
+        trT[2] = bytes32(uint256(uint160(address(t.lister))));
+        require(
+            _countExactLog(firstLogs, CRVUSD, trT, abi.encode(FEE)) == 1,
+            "FORK_AUTH_FULL_ROLLBACK first member fee Transfer"
+        );
+
+        // revoke AFTER the genuinely used admission; both lanes must then
+        // fail on the fresh primary candidate (auth rejection is the only
+        // difference; the failed attempts register nothing).
         _grantLister(t.router, address(t.lister), false);
-        _runBothLaneNegatives(t);
+        _runBothLaneNegatives(t, GAUGE_LEGACY_PROBE);
         // regrant: the same lane then succeeds — revocation disabled future
         // adds only (kept members, this listing, everything else untouched)
         _grantLister(t.router, address(t.lister), true);
+        // hoist the candidate scan OUT of the prank window: its staticcalls
+        // would otherwise consume the one-shot prank and the fee pull would
+        // run from the test contract (SafeTokenCallFailed).
+        Candidate memory cdR = _nextFreeCandidate(address(0), address(0));
+        require(!_isRegistered(cdR.gauge), "regrant candidate still unregistered after negatives");
         fvm.prank(payer());
-        t.lister.listGauge(POOL_PRIMARY, GAUGE_PRIMARY, GAUGE_INDEX, HANDLER_ID);
-        assertTrue(_isRegistered(GAUGE_PRIMARY), "regrant restores the lane");
+        t.lister.listGauge(cdR.pool, cdR.gauge, cdR.gaugeIndex, cdR.handlerId);
+        assertTrue(_isRegistered(cdR.gauge), "regrant restores the lane");
+        // the kept first member is STILL registered/weighted after all of it
+        assertTrue(_isRegistered(GAUGE_LEGACY_PROBE), "kept member after regrant cycle");
+        assertEq(_c().get_gauge_weight(GAUGE_LEGACY_PROBE), 0, "kept member weight after regrant cycle");
+        _assertI128Eq(_c().gauge_types(GAUGE_LEGACY_PROBE), LEGACY_GAUGE_TYPE, "kept member type after regrant cycle");
     }
 
-    function _runBothLaneNegatives(RouterTrio memory t) internal {
-        Candidate memory cdA = _nextFreeCandidate(address(0), address(0));
-        Candidate memory cdB = _nextFreeCandidate(address(0), address(0));
-        require(cdA.gauge != address(0) && cdB.gauge != address(0), "candidate availability");
-        F05Snap memory pre = _snapF05(t, cdA, cdB);
+    function _runBothLaneNegatives(RouterTrio memory t, address firstGauge) internal {
+        Candidate memory cdA = _nextFreeCandidate(firstGauge, address(0));
+        require(cdA.gauge != address(0), "candidate availability");
+        // both lanes target the SAME fresh unregistered candidate: the
+        // pinned controller registry admits exactly two candidates and one
+        // is held by the observed first member (or unconsumed in the
+        // pre-grant fixture). The auth rejection precedes any occupancy
+        // difference and the failed attempts register nothing, so both
+        // lanes still witness their exact NotAdder(L) frames.
+        Candidate memory cdB = cdA;
+        F05Snap memory pre = _snapF05(t, cdA, cdB, firstGauge);
         bytes memory notAdder = _routerErr(GaugeControllerAdmin.NotAdder.selector, abi.encode(address(t.lister)));
 
+        rvf.recordLogs();
         fvm.prank(payer());
         (bool paidOk, bytes memory paidRet) = address(t.lister)
             .call(
@@ -939,42 +1263,164 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         assertFalse(t.router.retired(), "guard not masked by retirement");
         assertFalse(t.router.isAdder(address(t.lister)), "guard not masked by grant");
 
-        F05Snap memory post = _snapF05(t, cdA, cdB);
+        _f05NegWindow(t);
+
+        F05Snap memory post = _snapF05(t, cdA, cdB, firstGauge);
         require(keccak256(abi.encode(pre)) == keccak256(abi.encode(post)), "FORK_AUTH_FULL_ROLLBACK whole-tx rollback");
     }
 
-    struct F05Snap {
-        uint256 payerBal;
-        uint256 allow;
-        uint256 listerBal;
-        uint256 routerBal;
-        uint256 escrow;
-        uint256 nGauges;
-        bytes32 committedListing;
-        uint256 votiumCustody;
-        uint256 vmDeposits;
-        bool cdAregistered;
-        bool cdBregistered;
+    /// @dev routerfix5 (g) / WITNESSES:10 committed-vs-trace discipline: the
+    /// two rejected lane attempts (drained differential window) commit NO
+    /// router/controller/lister/venue audit log at all. The fee-pull frames
+    /// that EXECUTED before R's NotAdder revert remain visible as crvUSD
+    /// trace entries — recorded as trace, never as committed receipts; the
+    /// enclosing low-level failures plus the complete-state equality in the
+    /// caller carry the committed claim.
+    function _f05NegWindow(RouterTrio memory t) internal {
+        RouterForkVm.Log[] memory negLogs = rvf.getRecordedLogs();
+        require(
+            _logCount(negLogs, address(t.router), T_GAUGE_ADDED) == 0, "FORK_AUTH_FULL_ROLLBACK no committed GaugeAdded"
+        );
+        require(_logCount(negLogs, CONTROLLER, T_NEW_GAUGE_KEC) == 0, "FORK_AUTH_FULL_ROLLBACK no committed NewGauge");
+        bytes32[] memory glTopic = new bytes32[](1);
+        glTopic[0] = keccak256("GaugeListed(address,address,address,int128,uint256,uint256,bool)");
+        require(
+            _logCount(negLogs, address(t.lister), glTopic[0]) == 0, "FORK_AUTH_FULL_ROLLBACK no committed GaugeListed"
+        );
+        require(
+            _emittersOnly(negLogs, CRVUSD), "FORK_AUTH_FULL_ROLLBACK negative window carries only crvUSD fee traces"
+        );
+        bytes32[] memory feeT = new bytes32[](3);
+        feeT[0] = keccak256("Transfer(address,address,uint256)");
+        feeT[1] = bytes32(uint256(uint160(payer())));
+        feeT[2] = bytes32(uint256(uint160(address(t.lister))));
+        require(
+            _countExactLog(negLogs, CRVUSD, feeT, abi.encode(FEE)) == 1,
+            "FORK_AUTH_FULL_ROLLBACK fee pull visible as trace only"
+        );
     }
 
-    function _snapF05(RouterTrio memory t, Candidate memory cdA, Candidate memory cdB)
+    /// @dev routerfix5 (g): per-member keyed C/L state used inside the full
+    /// F05 snapshot.
+    struct F05Member {
+        bool registered;
+        int128 gtype;
+        uint256 weight;
+        bytes32 listingHash;
+        uint256 typeWeight;
+    }
+
+    function _f05Member(CurveGaugeLister l, address gauge) internal view returns (F05Member memory fm) {
+        fm.listingHash = keccak256(abi.encode(l.getListing(gauge)));
+        fm.registered = _isRegistered(gauge);
+        if (fm.registered) {
+            fm.gtype = _c().gauge_types(gauge);
+            fm.weight = _c().get_gauge_weight(gauge);
+            fm.typeWeight = r_type_weight(fm.gtype);
+        } else {
+            fm.gtype = int128(999); // absence sentinel, never a fabricated 0
+        }
+    }
+
+    /// @dev routerfix5 (g): the FULL keyed snapshot per WITNESSES:10 —
+    /// complete balances (payer/L/R/FD/both venues), escrow, ALL platform
+    /// approvals, C count/type/weight state for every candidate AND the
+    /// retained first member, adapter keyed AND chronological receipts on the
+    /// real VoteMarket adapter (count + depositAt ladder + per-gauge
+    /// scheduled-quarter getDeposit digest), and the router grant/pending/
+    /// retired/lock lifecycle. Committed logs are observed via the live
+    /// differential windows around the negatives plus the first-member
+    /// payload checks. GAUGE_PRIMARY listings are keyed, never hardcoded.
+    struct F05Snap {
+        uint256 payerBal;
+        uint256 payerAllow;
+        uint256 listerBal;
+        uint256 routerBal;
+        uint256 fdBal;
+        uint256 escrow;
+        int128 nGauges;
+        int128 nTypes;
+        uint256 votiumCustody;
+        uint256 vmCustody;
+        uint256 vDepositsVm;
+        uint256 allowListerVa;
+        uint256 allowListerVma;
+        bytes32 vmReceiptsDigest;
+        bool adderLister;
+        address pendingR;
+        bool retiredR;
+        bytes32 lockWord;
+        F05Member first;
+        F05Member a;
+        F05Member b;
+    }
+
+    /// @dev routerfix5 (g): adapter keyed AND chronological receipt ledger —
+    /// per-gauge scheduled-quarter getDeposit triples plus the ordered
+    /// depositAt prefix on the real VoteMarket adapter (stack-lean helper).
+    function _f05VmLadder(RouterTrio memory t, Candidate memory cdA, Candidate memory cdB, address firstGauge)
+        internal
+        view
+        returns (bytes32)
+    {
+        return keccak256(abi.encodePacked(_f05VmaKeyed(t, cdA, cdB, firstGauge), _f05VmaChronological(t)));
+    }
+
+    /// @dev keyed half of the VoteMarket adapter receipt ledger.
+    function _f05VmaKeyed(RouterTrio memory t, Candidate memory cdA, Candidate memory cdB, address firstGauge)
+        internal
+        view
+        returns (bytes memory)
+    {
+        uint256 eq0 = (block.timestamp / 604800) * 604800;
+        (uint256 d0a, uint256 d0x, bytes32 d0r) = t.vma.getDeposit(cdA.gauge, eq0 + 604800);
+        (uint256 d1a, uint256 d1x, bytes32 d1r) = t.vma.getDeposit(cdB.gauge, eq0 + 604800);
+        (uint256 d2a, uint256 d2x, bytes32 d2r) = t.vma.getDeposit(firstGauge, eq0 + 604800);
+        return abi.encodePacked(d0a, d0x, d0r, d1a, d1x, d1r, d2a, d2x, d2r);
+    }
+
+    /// @dev chronological half: the ordered depositAt prefix (padded to a
+    /// fixed three-slot ledger so the digest is comparable across snapshots).
+    function _f05VmaChronological(RouterTrio memory t) internal view returns (bytes memory) {
+        bytes memory lad;
+        for (uint256 i = 0; i < 3; ++i) {
+            try t.vma.depositAt(i) returns (VoteMarketAdapter.DepositRecord memory rec) {
+                lad = abi.encodePacked(lad, rec.gauge, rec.scheduledEpoch, rec.amount, rec.executionEpoch, rec.receipt);
+            } catch {
+                lad = abi.encodePacked(lad, bytes32(0));
+            }
+        }
+        return lad;
+    }
+
+    function _snapF05(RouterTrio memory t, Candidate memory cdA, Candidate memory cdB, address firstGauge)
         internal
         view
         returns (F05Snap memory)
     {
-        return F05Snap({
-            payerBal: IErc20Venue(CRVUSD).balanceOf(payer()),
-            allow: IErc20Venue(CRVUSD).allowance(payer(), address(t.lister)),
-            listerBal: IErc20Venue(CRVUSD).balanceOf(address(t.lister)),
-            routerBal: IErc20Venue(CRVUSD).balanceOf(address(t.router)),
-            escrow: t.lister.totalEscrow(),
-            nGauges: uint256(int256(_c().n_gauges())),
-            committedListing: keccak256(abi.encode(t.lister.getListing(GAUGE_PRIMARY))),
-            votiumCustody: IErc20Venue(CRVUSD).balanceOf(address(t.va)),
-            vmDeposits: t.vma.depositCount(),
-            cdAregistered: _isRegistered(cdA.gauge),
-            cdBregistered: _isRegistered(cdB.gauge)
-        });
+        F05Snap memory s;
+        s.payerBal = IErc20Venue(CRVUSD).balanceOf(payer());
+        s.payerAllow = IErc20Venue(CRVUSD).allowance(payer(), address(t.lister));
+        s.listerBal = IErc20Venue(CRVUSD).balanceOf(address(t.lister));
+        s.routerBal = IErc20Venue(CRVUSD).balanceOf(address(t.router));
+        s.fdBal = IErc20Venue(CRVUSD).balanceOf(FEEDIST);
+        s.escrow = t.lister.totalEscrow();
+        s.nGauges = _c().n_gauges();
+        s.nTypes = _c().n_gauge_types();
+        s.votiumCustody = IErc20Venue(CRVUSD).balanceOf(address(t.va));
+        s.vmCustody = IErc20Venue(CRVUSD).balanceOf(address(t.vma));
+        s.vDepositsVm = t.vma.depositCount();
+        s.allowListerVa = IErc20Venue(CRVUSD).allowance(address(t.lister), address(t.va));
+        s.allowListerVma = IErc20Venue(CRVUSD).allowance(address(t.lister), address(t.vma));
+        s.vmReceiptsDigest = _f05VmLadder(t, cdA, cdB, firstGauge);
+        s.adderLister = t.router.isAdder(address(t.lister));
+        s.pendingR = t.router.pendingControllerAdmin();
+        s.retiredR = t.router.retired();
+        s.lockWord = rvf.load(address(t.router), bytes32(uint256(2)));
+        s.first = _f05Member(t.lister, firstGauge);
+        s.a = _f05Member(t.lister, cdA.gauge);
+        s.b = _f05Member(t.lister, cdB.gauge);
+        return s;
     }
 
     // ------------------------------------------------------------------
@@ -1058,6 +1504,9 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
             )
         );
         require(k5, "FORK_FULL_RAW_ADMIN gauge weight");
+        // routerfix5 (h)/F06 (review/ROUTERCONF2.md:274-276): the changed
+        // gauge weight must be read back as its LITERAL resulting value.
+        assertEq(_c().get_gauge_weight(g1), 12, "FORK_FULL_RAW_ADMIN changed gauge weight literal 12");
         (bool k6,) = _callFromAddr(
             DAO,
             address(rr),
@@ -1094,7 +1543,18 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
             )
         );
         require(k8, "third add");
-        require(_logCount(rvf.getRecordedLogs(), CONTROLLER, T_NEW_GAUGE_KEC) == 1, "FORK_FULL_RAW_ADMIN real NewGauge");
+        // routerfix5 (h)/F06 (review/ROUTERCONF2.md:274-276): the counted
+        // NewGauge is now a FULL payload comparison — emitter, complete
+        // topics array and exact data words for the real controller event,
+        // plus the router-side execute audit record.
+        RouterForkVm.Log[] memory f06Logs = rvf.getRecordedLogs();
+        bytes32[] memory ngT = new bytes32[](1);
+        ngT[0] = T_NEW_GAUGE_KEC;
+        require(
+            _countExactLog(f06Logs, CONTROLLER, ngT, abi.encode(g3, int128(2), uint256(3))) == 1,
+            "FORK_FULL_RAW_ADMIN real NewGauge full payload"
+        );
+        assertEq(_c().get_gauge_weight(g3), 3, "FORK_FULL_RAW_ADMIN third add weight literal 3");
     }
 
     function r_type_weight(int128 id) internal view returns (uint256) {
@@ -1126,7 +1586,7 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         assertEq(_c().get_gauge_weight(gAdd), 3, "grid adder add control");
 
         address[3] memory gridCallers = [rando(), address(t.lister), otherAdder];
-        bytes[] memory gridSelectors = new bytes[](5);
+        bytes[] memory gridSelectors = new bytes[](6);
         gridSelectors[0] = abi.encodeWithSelector(GaugeControllerAdmin.grant.selector, actor("f06 z"), true);
         gridSelectors[1] =
             abi.encodeWithSelector(GaugeControllerAdmin.execute.selector, abi.encodeWithSignature("n_gauge_types()"));
@@ -1136,6 +1596,13 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
         gridSelectors[4] = abi.encodeWithSelector(
             GaugeControllerAdmin.execute.selector,
             abi.encodeWithSelector(GaugeControllerAdmin.commit_transfer_ownership.selector, actor("f06 succ2"))
+        );
+        // routerfix5 (c) / review/ROUTERCONF2.md:218-223: the nested
+        // ownership cell must include the mediated APPLY arm, not only the
+        // nested commit; every actor now attempts execute(apply...).
+        gridSelectors[5] = abi.encodeWithSelector(
+            GaugeControllerAdmin.execute.selector,
+            abi.encodeWithSelector(GaugeControllerAdmin.apply_transfer_ownership.selector)
         );
         for (uint256 ci = 0; ci < gridCallers.length; ++ci) {
             for (uint256 si = 0; si < gridSelectors.length; ++si) {
@@ -1692,53 +2159,82 @@ abstract contract ForkGaugeControllerAdminSpec is ForkFixture {
             IRouterAcl(acl).getPermissionParamsLength(VOTING, DAO, EXECUTE_ROLE) == 0,
             "FORK_GOVERNANCE_WRONG_CALLER execute role unparameterized at pin"
         );
+        // routerfix5 (a) (review/ROUTERCONF2.md:187-206): the permission
+        // evidence must go through the REAL Agent entrypoint with the RAW
+        // unshifted action words. The verified Agent source
+        // (review/routerplan/evidence/agent.sol:1253-1268) forwards its
+        // runtime parameter array to kernel.hasPermission via
+        // ConversionHelpers.dangerouslyCastUintArrayToBytes WITHOUT any
+        // shift, and execute() authenticates with
+        // authP(EXECUTE_ROLE, arr(_target, _ethValue, uint256(_getSig(_data))))
+        // (agent.sol:1501-1503) — raw values. DEPLOYMENT:16 requires exactly
+        // those RAW triples per action; the prior shifted (arg << 8) form
+        // never described what execute actually passes.
+        //
+        // The review's REQUIRED values for commit(C), quoted verbatim into
+        // executable assertions (review/ROUTERCONF2.md:194-197):
         require(
-            _canPerform(acl, VOTING, CONTROLLER, IControllerVenue.commit_transfer_ownership.selector),
+            uint256(uint160(CONTROLLER)) == 270125199945504599111523101509100263416079599291,
+            "FORK_GOVERNANCE_WRONG_CALLER ROUTERCONF2:194 raw commit(C) target word"
+        );
+        require(
+            uint256(uint32(IControllerVenue.commit_transfer_ownership.selector)) == 1799625280,
+            "FORK_GOVERNANCE_WRONG_CALLER ROUTERCONF2:196 raw commit(C) selector word"
+        );
+        require(
+            _canPerform(VOTING, CONTROLLER, IControllerVenue.commit_transfer_ownership.selector),
             "FORK_GOVERNANCE_WRONG_CALLER canPerform commit(C) Voting context"
         );
         require(
-            _canPerform(acl, VOTING, CONTROLLER, IControllerVenue.apply_transfer_ownership.selector),
+            _canPerform(VOTING, CONTROLLER, IControllerVenue.apply_transfer_ownership.selector),
             "FORK_GOVERNANCE_WRONG_CALLER canPerform apply(C) Voting context"
         );
         require(
-            _canPerform(acl, VOTING, address(r), GaugeControllerAdmin.grant.selector),
+            _canPerform(VOTING, address(r), GaugeControllerAdmin.grant.selector),
             "FORK_GOVERNANCE_WRONG_CALLER canPerform grant(R) Voting context"
         );
         require(
-            _canPerform(acl, VOTING, address(r), GaugeControllerAdmin.commit_transfer_ownership.selector),
+            _canPerform(VOTING, address(r), GaugeControllerAdmin.commit_transfer_ownership.selector),
             "FORK_GOVERNANCE_WRONG_CALLER canPerform commit(R) Voting context"
         );
         require(
-            _canPerform(acl, VOTING, address(r), GaugeControllerAdmin.apply_transfer_ownership.selector),
+            _canPerform(VOTING, address(r), GaugeControllerAdmin.apply_transfer_ownership.selector),
             "FORK_GOVERNANCE_WRONG_CALLER canPerform apply(R) Voting context"
         );
         require(
-            _canPerform(acl, VOTING, l, CurveGaugeLister.setPaused.selector),
+            _canPerform(VOTING, l, CurveGaugeLister.setPaused.selector),
             "FORK_GOVERNANCE_WRONG_CALLER canPerform unpause(L) Voting context"
         );
-        // outsider denied on the very same specific actions
+        // outsider denied on the very same specific actions, same real
+        // Agent.canPerform channel (sender-negative proves the channel is
+        // wired, not an always-true oracle).
         require(
-            !_canPerform(acl, rando(), CONTROLLER, IControllerVenue.commit_transfer_ownership.selector),
+            !_canPerform(rando(), CONTROLLER, IControllerVenue.commit_transfer_ownership.selector),
             "FORK_GOVERNANCE_WRONG_CALLER outsider canPerform commit(C) denied"
         );
         require(
-            !_canPerform(acl, rando(), address(r), GaugeControllerAdmin.grant.selector),
+            !_canPerform(rando(), address(r), GaugeControllerAdmin.grant.selector),
             "FORK_GOVERNANCE_WRONG_CALLER outsider canPerform grant(R) denied"
+        );
+        require(
+            !_canPerform(rando(), l, CurveGaugeLister.setPaused.selector),
+            "FORK_GOVERNANCE_WRONG_CALLER outsider canPerform unpause(L) denied"
         );
     }
 
-    function _canPerform(address acl, address who, address actionTarget, bytes4 actionSelector)
-        internal
-        view
-        returns (bool)
-    {
-        // DEPLOYMENT:16 evidence: [uint160(target), value, uint32(selector)]
-        // as Aragon Permission words ((arg << 8) | ethValue).
+    /// @dev routerfix5 (a): DEPLOYMENT:16 parameter evidence through the
+    /// REAL Agent app — canPerform(Voting, EXECUTE_ROLE,
+    /// [uint160(target), 0, uint32(selector)]) with the RAW unshifted words
+    /// the deployed execute itself authenticates against
+    /// (agent.sol:1253-1268,1501-1503). The pin's EXECUTE_ROLE carries zero
+    /// parameter restrictions (params length 0 above), so the context is
+    /// carried unshifted exactly as forwarded by the runtime.
+    function _canPerform(address who, address actionTarget, bytes4 actionSelector) internal view returns (bool) {
         uint256[] memory context = new uint256[](3);
-        context[0] = uint256(uint160(actionTarget)) << 8;
+        context[0] = uint256(uint160(actionTarget)); // raw, no shift
         context[1] = 0; // every prescribed action sends exactly zero ETH value
-        context[2] = uint256(uint32(actionSelector)) << 8;
-        return IRouterAcl(acl).hasPermission(who, DAO, EXECUTE_ROLE, context);
+        context[2] = uint256(uint32(actionSelector)); // raw, no shift
+        return IRouterAgent(DAO).canPerform(who, EXECUTE_ROLE, context);
     }
 
     /// @dev Builds, passes and executes a DIRECT-targeting script: R must
